@@ -26,8 +26,8 @@ function waitEcwid(callback) {
 
 function updateQuantityText() {
   document.querySelectorAll('.form-control__select-text').forEach(el => {
-    if (el.textContent.includes(':') && !el.textContent.includes(MSG.BOX_TEXT.replace('&nbsp;', ' '))) {
-  el.innerHTML = el.textContent.replace(':', `${MSG.BOX_TEXT}:`);
+    if (el.textContent.includes(':') && !el.textContent.includes('ящиків')) {
+  el.innerHTML = el.textContent.replace(':', `&nbsp;ящиків:`);
 }
   });
 }
