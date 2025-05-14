@@ -24,9 +24,9 @@ const QVM = {
 function updateQuantityText() {
   document.querySelectorAll('.form-control__select-text').forEach(el => {
     const t = el.closest('.ec-cart-item__wrap-primary')?.querySelector('.ec-cart-item__title')?.textContent?.trim();
-    if (t === MSG.PRODUCT_TITLE_BOX && el.textContent.includes(':')) {
-      el.innerHTML = el.textContent.replace(':', `${MSG.BOX_TEXT}:`);
-    }
+   if (el.textContent.includes(':') && !el.textContent.includes('ящиків')) {
+  el.innerHTML = el.textContent.replace(':', `&nbsp;ящиків:`);
+}
   });
 }
 
