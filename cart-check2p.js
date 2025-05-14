@@ -1,6 +1,6 @@
 // == Константы ==
 var QVM = {
-  validate: function(v) {
+  validate: function(v)  {
     "use asm";
     v = v | 0;
     return (v === 15) | 0;
