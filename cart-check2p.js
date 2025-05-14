@@ -31,12 +31,18 @@ function waitEcwid(c) {
 }
 
 function updateQuantityText() {
+  const hasBoxProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
+    .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE);
+
+  if (!hasBoxProduct) return;
+
   document.querySelectorAll('.form-control__select-text').forEach(el => {
-   if (el.textContent.includes(':') && !el.textContent.includes('ящиків')) {
-  el.innerHTML = el.textContent.replace(':', `&nbsp;ящиків:`);
-}
+    if (el.textContent.includes(':') && !el.textContent.includes('ящиків')) {
+      el.innerHTML = el.textContent.replace(':', `&nbsp;ящиків:`);
+    }
   });
 }
+
 
 function validateCartItems() {
   let total = 0;
@@ -102,12 +108,18 @@ function validateCartItems() {
 
 // == Новые функции для "Полісол™ (опт)" ==
 function updateQuantityCansTxt() {
+  const hasCansProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
+    .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE_CANS);
+
+  if (!hasCansProduct) return;
+
   document.querySelectorAll('.form-control__select-text').forEach(el => {
     if (el.textContent.includes(':') && !el.textContent.includes('банок')) {
-  el.innerHTML = el.textContent.replace(':', `&nbsp;банок:`);
-}
+      el.innerHTML = el.textContent.replace(':', `&nbsp;банок:`);
+    }
   });
 }
+
 
 function validateCartCans(cart) {
   const cansItems = cart.items.filter(item => item.name === MSG.PRODUCT_TITLE_CANS);
@@ -153,17 +165,15 @@ function extractMainQty(item) {
 }
 
 // == Подключение ==
-function setupCartWatcher() {
-  Ecwid.OnCartChanged.add(function(cart) {
-    setTimeout(() => {
-      updateQuantityText();
-      validateCartItems();
+Ecwid.OnCartChanged.add(function(cart) {
+  setTimeout(() => {
+    updateQuantityText();
+    updateQuantityCansTxt();
+    validateCartItems(cart);
+    validateCartCans(cart);
+  }, 300);
+});
 
-      updateQuantityCansTxt();
-      validateCartCans(cart);
-    }, 300);
-  });
-}
 
 waitEcwid(() => {
   Ecwid.OnAPILoaded.add(() => {
