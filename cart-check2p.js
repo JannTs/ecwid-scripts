@@ -1,6 +1,6 @@
 // == Константы ==
 var QVM = {
-  validate: function(v)  {
+  validate: function(v) {
     "use asm";
     v = v | 0;
     return (v === 15) | 0;
@@ -23,50 +23,62 @@ var MSG = {
 
 var lastAlertTime = 0;
 
-// == Вспомогательные ==
-function waitEcwid(c) {
-  typeof Ecwid !== 'undefined' && typeof Ecwid.OnAPILoaded !== 'undefined'
-    ? c()
-    : setTimeout(() => waitEcwid(c), 100);
+// == Вспомогательные функции ==
+function waitEcwid(callback) {
+  if (typeof Ecwid !== 'undefined' && typeof Ecwid.OnAPILoaded !== 'undefined') {
+    callback();
+  } else {
+    setTimeout(() => waitEcwid(callback), 100);
+  }
 }
 
-// == Функции для ЯЩИКОВ ==
+// == Обновление текста количества ==
 function updateQuantityText() {
-  const hasBoxProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
-    .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE);
-
-  if (!hasBoxProduct) return;
+  const titles = Array.from(document.querySelectorAll('.ec-cart-item__title')).map(el => el.textContent.trim());
+  const hasBoxProduct = titles.includes(MSG.PRODUCT_TITLE);
+  const hasCansProduct = titles.includes(MSG.PRODUCT_TITLE_CANS);
 
   document.querySelectorAll('.form-control__select-text').forEach(el => {
-    if (el.textContent.includes(':') && !el.textContent.includes('ящиків')) {
-      el.innerHTML = el.textContent.replace(':', MSG.BOX_TEXT + ':');
+    if (el.textContent.includes(':')) {
+      if (hasBoxProduct && !el.textContent.includes('ящиків')) {
+        el.innerHTML = el.textContent.replace(':', `${MSG.BOX_TEXT}:`);
+      }
+      if (hasCansProduct && !el.textContent.includes('банок')) {
+        el.innerHTML = el.textContent.replace(':', `${MSG.BOX_TEXT_CANS}:`);
+      }
     }
   });
 }
 
-function validateCartItems() {
+// == Валидация ящиков ==
+function validateCartItems(cart) {
   let total = 0;
-  const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
   let productFound = false;
   let shouldShowAlert = false;
 
+  const items = cart.items || [];
   items.forEach(item => {
-    const title = item.querySelector('.ec-cart-item__title');
-    if (title && title.textContent.trim() === MSG.PRODUCT_TITLE) {
+    if (item.name === MSG.PRODUCT_TITLE) {
       productFound = true;
-      item.querySelectorAll('.ec-cart-option--value').forEach(option => {
-        const value = parseInt(option.textContent.trim().match(/\d+/), 10);
+      item.options.forEach(option => {
+        const value = parseInt(option.value.match(/\d+/), 10);
         total += isNaN(value) ? 0 : value;
       });
+    }
+  });
 
-      const checkbox = document.getElementById('form-control__checkbox--agree');
-      const isValid = QVM.validate(total | 0);
-      if (checkbox) checkbox.disabled = !isValid;
+  const checkbox = document.getElementById('form-control__checkbox--agree');
+  const isValid = QVM.validate(total);
+  if (checkbox) checkbox.disabled = !isValid;
 
-      if (!isValid) {
-        shouldShowAlert = true;
-        let optionsDiv = item.querySelector('.ec-cart-item__options.ec-text-muted');
-        if (optionsDiv && !optionsDiv.nextElementSibling?.classList?.contains('ec-form__title')) {
+  if (productFound) {
+    const nodes = document.querySelectorAll('.ec-cart-item__wrap-primary');
+    nodes.forEach(node => {
+      const title = node.querySelector('.ec-cart-item__title');
+      if (title && title.textContent.trim() === MSG.PRODUCT_TITLE) {
+        const optionsDiv = node.querySelector('.ec-cart-item__options.ec-text-muted');
+        const hasWarning = node.querySelector(`a[href="${MSG.PRODUCT_URL}"]`);
+        if (!isValid && optionsDiv && !hasWarning) {
           const linkDiv = document.createElement('div');
           linkDiv.className = 'ec-form__title ec-header-h6';
           linkDiv.innerHTML = `
@@ -75,58 +87,20 @@ function validateCartItems() {
               ${MSG.LINK_TEXT}
             </a>
           `;
-          const link = linkDiv.querySelector('a');
-          link.addEventListener('click', function (e) {
-            e.preventDefault();
-            Ecwid.Cart.clear();
-            setTimeout(() => { window.location.href = this.href; }, 200);
-          });
-          optionsDiv.parentNode.insertBefore(linkDiv, optionsDiv.nextSibling);
+          node.appendChild(linkDiv);
+        } else if (isValid && hasWarning?.closest('.ec-form__title')) {
+          hasWarning.closest('.ec-form__title').remove();
         }
-      } else {
-        const warningDiv = item.querySelector('.ec-cart-item__options.ec-text-muted + .ec-form__title');
-        if (warningDiv) {
-          warningDiv.remove();
-        }
-      }
-    }
-  });
-
-  if (shouldShowAlert && Date.now() - lastAlertTime > 5000) {
-    alert(MSG.ALERT);
-    lastAlertTime = Date.now();
-  }
-
-  if (!productFound) {
-    document.querySelectorAll('.ec-form__title.ec-header-h6').forEach(el => {
-      if (el.querySelector('a')?.textContent === MSG.LINK_TEXT) {
-        el.remove();
       }
     });
+    if (!isValid && Date.now() - lastAlertTime > 5000) {
+      alert(MSG.ALERT);
+      lastAlertTime = Date.now();
+    }
   }
 }
 
-// == Функции для БАНОК ==
-function updateQuantityCansTxt() {
-  const hasCansProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
-    .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE_CANS);
-
-  if (!hasCansProduct) return;
-
-  document.querySelectorAll('.form-control__select-text').forEach(el => {
-    if (el.textContent.includes(':') && !el.textContent.includes('банок')) {
-      el.innerHTML = el.textContent.replace(':', MSG.BOX_TEXT_CANS + ':');
-    }
-  });
-}
-
-function extractMainQty(item) {
-  const qtyOption = item.options.find(opt => opt.name.toLowerCase().includes('банок'));
-  if (!qtyOption) return 0;
-  const match = qtyOption.value.match(/\d+/);
-  return match ? parseInt(match[0], 10) : 0;
-}
-
+// == Валидация банок ==
 function validateCartCans(cart) {
   const cansItems = cart.items.filter(item => item.name === MSG.PRODUCT_TITLE_CANS);
   if (cansItems.length === 0) return;
@@ -139,55 +113,54 @@ function validateCartCans(cart) {
   const isValid = allSame && total === refQty;
   if (checkbox) checkbox.disabled = !isValid;
 
-  const productRow = Array.from(document.querySelectorAll('.ec-cart-item__wrap-primary'))
-    .find(el => el.querySelector('.ec-cart-item__title')?.textContent.trim() === MSG.PRODUCT_TITLE_CANS);
-
-  if (!isValid && productRow) {
-    const existingLink = productRow.querySelector(`a[href="${MSG.PRODUCT_URL_CANS}"]`);
-    if (!existingLink) {
-      const linkDiv = document.createElement('div');
-      linkDiv.className = 'ec-form__title ec-header-h6';
-      linkDiv.innerHTML = `
-        <div class="marker-required marker-required--medium marker-required--active"></div>
-        <a href="${MSG.PRODUCT_URL_CANS}" target="_self" style="color: blue; font-weight: bold;">
-          ${MSG.LINK_TEXT_CANS}
-        </a>
-      `;
-      productRow.appendChild(linkDiv);
-    }
-
-    if (Date.now() - lastAlertTime > 5000) {
-      alert(MSG.ALERT_CANS);
-      lastAlertTime = Date.now();
-    }
-  } else {
-    // удалить сообщение, если всё стало корректно
-    document.querySelectorAll('.ec-form__title.ec-header-h6 a').forEach(a => {
-      if (a.href.includes(MSG.PRODUCT_URL_CANS)) {
-        a.closest('.ec-form__title.ec-header-h6')?.remove();
+  const nodes = document.querySelectorAll('.ec-cart-item__wrap-primary');
+  nodes.forEach(node => {
+    const title = node.querySelector('.ec-cart-item__title');
+    if (title && title.textContent.trim() === MSG.PRODUCT_TITLE_CANS) {
+      const hasLink = node.querySelector(`a[href="${MSG.PRODUCT_URL_CANS}"]`);
+      if (!isValid && !hasLink) {
+        const linkDiv = document.createElement('div');
+        linkDiv.className = 'ec-form__title ec-header-h6';
+        linkDiv.innerHTML = `
+          <div class="marker-required marker-required--medium marker-required--active"></div>
+          <a href="${MSG.PRODUCT_URL_CANS}" target="_self" style="color: blue; font-weight: bold;">
+            ${MSG.LINK_TEXT_CANS}
+          </a>
+        `;
+        node.appendChild(linkDiv);
+      } else if (isValid && hasLink?.closest('.ec-form__title')) {
+        hasLink.closest('.ec-form__title').remove();
       }
-    });
+    }
+  });
+
+  if (!isValid && Date.now() - lastAlertTime > 5000) {
+    alert(MSG.ALERT_CANS);
+    lastAlertTime = Date.now();
   }
 }
 
-// == Подключение ==
-Ecwid.OnCartChanged.add(function(cart) {
-  setTimeout(() => {
-    updateQuantityText();
-    updateQuantityCansTxt();
-    validateCartItems();
-    validateCartCans(cart);
-  }, 300);
-});
+function extractMainQty(item) {
+  const qtyOption = item.options.find(opt => opt.name.includes('банок'));
+  const match = qtyOption?.value.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
+}
 
+// == Подключения ==
 waitEcwid(() => {
   Ecwid.OnAPILoaded.add(() => {
+    Ecwid.OnCartChanged.add(cart => {
+      setTimeout(() => {
+        updateQuantityText();
+        validateCartItems(cart);
+        validateCartCans(cart);
+      }, 300);
+    });
+
     Ecwid.OnPageLoaded.add(page => {
       if (page.type === "CART") {
         setTimeout(() => {
           updateQuantityText();
-          updateQuantityCansTxt();
-          validateCartItems();
         }, 500);
       }
     });
