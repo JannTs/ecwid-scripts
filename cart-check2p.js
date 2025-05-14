@@ -32,9 +32,9 @@ function waitEcwid(c) {
 
 function updateQuantityText() {
   document.querySelectorAll('.form-control__select-text').forEach(el => {
-    if (el.textContent.includes(':') && !el.textContent.includes(MSG.BOX_TEXT)) {
-      el.innerHTML = el.textContent.replace(':', `${MSG.BOX_TEXT}:`);
-    }
+   if (el.textContent.includes(':') && !el.textContent.includes('ящиків')) {
+  el.innerHTML = el.textContent.replace(':', `&nbsp;ящиків:`);
+}
   });
 }
 
@@ -103,9 +103,9 @@ function validateCartItems() {
 // == Новые функции для "Полісол™ (опт)" ==
 function updateQuantityCansTxt() {
   document.querySelectorAll('.form-control__select-text').forEach(el => {
-    if (el.textContent.includes(':') && !el.textContent.includes(MSG.BOX_TEXT_CANS)) {
-      el.innerHTML = el.textContent.replace(':', `${MSG.BOX_TEXT_CANS}:`);
-    }
+    if (el.textContent.includes(':') && !el.textContent.includes('банок')) {
+  el.innerHTML = el.textContent.replace(':', `&nbsp;банок:`);
+}
   });
 }
 
