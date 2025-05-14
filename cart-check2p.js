@@ -23,13 +23,14 @@ var MSG = {
 
 var lastAlertTime = 0;
 
-// == Функции из cart-check.js без изменений ==
+// == Вспомогательные ==
 function waitEcwid(c) {
-  typeof Ecwid !== 'undefined' && typeof Ecwid.OnAPILoaded !== 'undefined' 
-    ? c() 
+  typeof Ecwid !== 'undefined' && typeof Ecwid.OnAPILoaded !== 'undefined'
+    ? c()
     : setTimeout(() => waitEcwid(c), 100);
 }
 
+// == Функции для ЯЩИКОВ ==
 function updateQuantityText() {
   const hasBoxProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
     .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE);
@@ -38,11 +39,10 @@ function updateQuantityText() {
 
   document.querySelectorAll('.form-control__select-text').forEach(el => {
     if (el.textContent.includes(':') && !el.textContent.includes('ящиків')) {
-      el.innerHTML = el.textContent.replace(':', `&nbsp;ящиків:`);
+      el.innerHTML = el.textContent.replace(':', MSG.BOX_TEXT + ':');
     }
   });
 }
-
 
 function validateCartItems() {
   let total = 0;
@@ -52,7 +52,7 @@ function validateCartItems() {
 
   items.forEach(item => {
     const title = item.querySelector('.ec-cart-item__title');
-    if(title && title.textContent.trim() === MSG.PRODUCT_TITLE) {
+    if (title && title.textContent.trim() === MSG.PRODUCT_TITLE) {
       productFound = true;
       item.querySelectorAll('.ec-cart-option--value').forEach(option => {
         const value = parseInt(option.textContent.trim().match(/\d+/), 10);
@@ -61,12 +61,12 @@ function validateCartItems() {
 
       const checkbox = document.getElementById('form-control__checkbox--agree');
       const isValid = QVM.validate(total | 0);
-      if(checkbox) checkbox.disabled = !isValid;
+      if (checkbox) checkbox.disabled = !isValid;
 
-      if(!isValid) {
+      if (!isValid) {
         shouldShowAlert = true;
         let optionsDiv = item.querySelector('.ec-cart-item__options.ec-text-muted');
-        if(optionsDiv && !optionsDiv.nextElementSibling?.classList?.contains('ec-form__title')) {
+        if (optionsDiv && !optionsDiv.nextElementSibling?.classList?.contains('ec-form__title')) {
           const linkDiv = document.createElement('div');
           linkDiv.className = 'ec-form__title ec-header-h6';
           linkDiv.innerHTML = `
@@ -76,7 +76,7 @@ function validateCartItems() {
             </a>
           `;
           const link = linkDiv.querySelector('a');
-          link.addEventListener('click', function(e) {
+          link.addEventListener('click', function (e) {
             e.preventDefault();
             Ecwid.Cart.clear();
             setTimeout(() => { window.location.href = this.href; }, 200);
@@ -85,28 +85,28 @@ function validateCartItems() {
         }
       } else {
         const warningDiv = item.querySelector('.ec-cart-item__options.ec-text-muted + .ec-form__title');
-        if(warningDiv) {
+        if (warningDiv) {
           warningDiv.remove();
         }
       }
     }
   });
 
-  if(shouldShowAlert && Date.now() - lastAlertTime > 5000) {
+  if (shouldShowAlert && Date.now() - lastAlertTime > 5000) {
     alert(MSG.ALERT);
     lastAlertTime = Date.now();
   }
 
-  if(!productFound) {
+  if (!productFound) {
     document.querySelectorAll('.ec-form__title.ec-header-h6').forEach(el => {
-      if(el.querySelector('a')?.textContent === MSG.LINK_TEXT) {
+      if (el.querySelector('a')?.textContent === MSG.LINK_TEXT) {
         el.remove();
       }
     });
   }
 }
 
-// == Новые функции для "Полісол™ (опт)" ==
+// == Функции для БАНОК ==
 function updateQuantityCansTxt() {
   const hasCansProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
     .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE_CANS);
@@ -115,11 +115,17 @@ function updateQuantityCansTxt() {
 
   document.querySelectorAll('.form-control__select-text').forEach(el => {
     if (el.textContent.includes(':') && !el.textContent.includes('банок')) {
-      el.innerHTML = el.textContent.replace(':', `&nbsp;банок:`);
+      el.innerHTML = el.textContent.replace(':', MSG.BOX_TEXT_CANS + ':');
     }
   });
 }
 
+function extractMainQty(item) {
+  const qtyOption = item.options.find(opt => opt.name.toLowerCase().includes('банок'));
+  if (!qtyOption) return 0;
+  const match = qtyOption.value.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
+}
 
 function validateCartCans(cart) {
   const cansItems = cart.items.filter(item => item.name === MSG.PRODUCT_TITLE_CANS);
@@ -131,22 +137,22 @@ function validateCartCans(cart) {
 
   const checkbox = document.getElementById('form-control__checkbox--agree');
   const isValid = allSame && total === refQty;
-  if(checkbox) checkbox.disabled = !isValid;
+  if (checkbox) checkbox.disabled = !isValid;
 
-  const productRow = document.querySelectorAll('.ec-cart-item__wrap-primary').find(el => 
-    el.querySelector('.ec-cart-item__title')?.textContent.trim() === MSG.PRODUCT_TITLE_CANS
-  );
+  const productRow = Array.from(document.querySelectorAll('.ec-cart-item__wrap-primary'))
+    .find(el => el.querySelector('.ec-cart-item__title')?.textContent.trim() === MSG.PRODUCT_TITLE_CANS);
 
   if (!isValid && productRow) {
-    const linkDiv = document.createElement('div');
-    linkDiv.className = 'ec-form__title ec-header-h6';
-    linkDiv.innerHTML = `
-      <div class="marker-required marker-required--medium marker-required--active"></div>
-      <a href="${MSG.PRODUCT_URL_CANS}" target="_self" style="color: blue; font-weight: bold;">
-        ${MSG.LINK_TEXT_CANS}
-      </a>
-    `;
-    if (!productRow.querySelector(`a[href="${MSG.PRODUCT_URL_CANS}"]`)) {
+    const existingLink = productRow.querySelector(`a[href="${MSG.PRODUCT_URL_CANS}"]`);
+    if (!existingLink) {
+      const linkDiv = document.createElement('div');
+      linkDiv.className = 'ec-form__title ec-header-h6';
+      linkDiv.innerHTML = `
+        <div class="marker-required marker-required--medium marker-required--active"></div>
+        <a href="${MSG.PRODUCT_URL_CANS}" target="_self" style="color: blue; font-weight: bold;">
+          ${MSG.LINK_TEXT_CANS}
+        </a>
+      `;
       productRow.appendChild(linkDiv);
     }
 
@@ -154,14 +160,14 @@ function validateCartCans(cart) {
       alert(MSG.ALERT_CANS);
       lastAlertTime = Date.now();
     }
+  } else {
+    // удалить сообщение, если всё стало корректно
+    document.querySelectorAll('.ec-form__title.ec-header-h6 a').forEach(a => {
+      if (a.href.includes(MSG.PRODUCT_URL_CANS)) {
+        a.closest('.ec-form__title.ec-header-h6')?.remove();
+      }
+    });
   }
-}
-
-function extractMainQty(item) {
-  const qtyOption = item.options.find(opt => opt.name.includes('банок'));
-  if (!qtyOption) return 0;
-  const match = qtyOption.value.match(/\d+/);
-  return match ? parseInt(match[0], 10) : 0;
 }
 
 // == Подключение ==
@@ -169,23 +175,22 @@ Ecwid.OnCartChanged.add(function(cart) {
   setTimeout(() => {
     updateQuantityText();
     updateQuantityCansTxt();
-    validateCartItems(cart);
+    validateCartItems();
     validateCartCans(cart);
   }, 300);
 });
 
-
 waitEcwid(() => {
   Ecwid.OnAPILoaded.add(() => {
-    setupCartWatcher();
     Ecwid.OnPageLoaded.add(page => {
       if (page.type === "CART") {
         setTimeout(() => {
           updateQuantityText();
-          validateCartItems();
           updateQuantityCansTxt();
+          validateCartItems();
         }, 500);
       }
     });
   });
 });
+
