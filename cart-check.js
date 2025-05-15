@@ -19,7 +19,7 @@ var MSG = {
 
 var lastAlertTime = 0;
 
-// == Функции ==
+// == Вспомогательные ==
 function waitEcwid(callback) {
   if (typeof Ecwid !== 'undefined' && typeof Ecwid.OnAPILoaded !== 'undefined') {
     callback();
@@ -28,29 +28,18 @@ function waitEcwid(callback) {
   }
 }
 
-// Используем MutationObserver вместо setInterval
-function observeQuantityChanges() {
-  const container = document.querySelector('.ec-cart');
-  if (!container) return;
+function modifyBoxText() {
+  const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
+  items.forEach(item => {
+    const titleEl = item.querySelector('.ec-cart-item__title');
+    const qtyText = item.querySelector('.form-control__select-text');
 
-  const observer = new MutationObserver(() => {
-    const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
-    items.forEach(item => {
-      const titleEl = item.querySelector('.ec-cart-item__title');
-      const textEl = item.querySelector('.form-control__select-text');
-      if (!titleEl || !textEl) return;
-
-      const title = titleEl.textContent.trim();
-      if (title === MSG.PRODUCT_TITLE && !textEl.innerHTML.includes(MSG.BOX_TEXT)) {
-        textEl.innerHTML = textEl.textContent.replace(':', `${MSG.BOX_TEXT}:`);
+    if (titleEl && qtyText && titleEl.textContent.trim() === MSG.PRODUCT_TITLE) {
+      // Вставляем слово только если его ещё нет
+      if (!qtyText.innerHTML.includes(MSG.BOX_TEXT)) {
+        qtyText.innerHTML = qtyText.innerHTML.replace(':', `${MSG.BOX_TEXT}:`);
       }
-    });
-  });
-
-  observer.observe(container, {
-    childList: true,
-    subtree: true,
-    characterData: true
+    }
   });
 }
 
@@ -160,11 +149,11 @@ function checkExtraItems() {
 // == Подключение ==
 waitEcwid(() => {
   Ecwid.OnAPILoaded.add(() => {
-    Ecwid.OnCartChanged.add(function () {
+    Ecwid.OnCartChanged.add(() => {
       setTimeout(() => {
         validateCartItems();
         checkExtraItems();
-        observeQuantityChanges();
+        modifyBoxText(); // теперь вызывается каждый раз
       }, 300);
     });
 
@@ -173,7 +162,7 @@ waitEcwid(() => {
         setTimeout(() => {
           validateCartItems();
           checkExtraItems();
-          observeQuantityChanges();
+          modifyBoxText();
         }, 500);
       }
     });
