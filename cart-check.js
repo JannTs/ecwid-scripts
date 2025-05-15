@@ -124,6 +124,7 @@ function checkExtraItems() {
   }
 
   extraItems.forEach(item => {
+    // === Добавление кнопки удаления ===
     if (!item.querySelector('.ec-remove-link-marker')) {
       const linkDiv = document.createElement('div');
       linkDiv.className = 'ec-form__title ec-header-h6 ec-remove-link-marker';
@@ -141,6 +142,15 @@ function checkExtraItems() {
       });
 
       item.appendChild(linkDiv);
+    }
+
+    // === Удаление "ящиків" из текста выбора ===
+    const wrapContainer = item.closest('.ec-cart-item__wrap'); // Найти обертку товара
+    if (wrapContainer) {
+      const selectText = wrapContainer.querySelector('.form-control__select-text');
+      if (selectText && selectText.textContent.includes('ящиків')) {
+        selectText.innerHTML = selectText.innerHTML.replace('ящиків', '').replace(/\s+:/, ':'); // аккуратно убираем лишнее
+      }
     }
   });
 
