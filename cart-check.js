@@ -14,7 +14,8 @@ var MSG = {
   PRODUCT_TITLE: 'Ящик екстракту полісолодового (15бан./550г) в асортименті:',
   BOX_TEXT: '&nbsp;ящиків',
   ALERT_EXTRA_ITEMS: 'Це спеціальний кошик для акційного товару. Він діє лише для:\n"Ящик екстракту полісолодового (15бан./550г) в асортименті"\n\nОднак наразі у кошику є інші товари. Це порушує умови акції — будь ласка:\n✔ Видаліть зайві позиції або ✔ Оформіть їх окремим замовленням',
-  LINK_TEXT_REMOVE: '❌ Видалити товар з кошика'
+  LINK_TEXT_REMOVE: '❌ Видалити товар з кошика',
+  DISABLED_CONTROL_HINT: 'Ця дія тимчасово недоступна при замовленні акційного товару.'
 };
 
 var lastAlertTime = 0;
@@ -27,24 +28,6 @@ function waitEcwid(callback) {
     setTimeout(() => waitEcwid(callback), 100);
   }
 }
-
-function disableCartControls() {
-  const couponBlock = document.querySelector('.ec-cart__coupon.ec-cart-coupon');
-  const shoppingBlock = document.querySelector('.ec-cart__shopping.ec-cart-shopping');
-
-  if (couponBlock) {
-    couponBlock.style.pointerEvents = 'none';
-    couponBlock.style.opacity = '0.5';
-    couponBlock.title = 'Недоступно для замовлення';
-  }
-
-  if (shoppingBlock) {
-    shoppingBlock.style.pointerEvents = 'none';
-    shoppingBlock.style.opacity = '0.5';
-    shoppingBlock.title = 'Ця дія недоступна при цьому замовленні';
-  }
-}
-
 
 function updateQuantityText() {
   const hasBoxProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
@@ -135,14 +118,12 @@ function checkExtraItems() {
     return title && title !== MSG.PRODUCT_TITLE;
   });
 
-  // 🔒 Блокировка чекбокса, если есть лишние товары
   const checkbox = document.getElementById('form-control__checkbox--agree');
   if (checkbox) {
     checkbox.disabled = extraItems.length > 0;
   }
 
   extraItems.forEach(item => {
-    // === Добавление кнопки удаления ===
     if (!item.querySelector('.ec-remove-link-marker')) {
       const linkDiv = document.createElement('div');
       linkDiv.className = 'ec-form__title ec-header-h6 ec-remove-link-marker';
@@ -162,12 +143,11 @@ function checkExtraItems() {
       item.appendChild(linkDiv);
     }
 
-    // === Удаление "ящиків" из текста выбора ===
-    const wrapContainer = item.closest('.ec-cart-item__wrap'); // Найти обертку товара
+    const wrapContainer = item.closest('.ec-cart-item__wrap');
     if (wrapContainer) {
       const selectText = wrapContainer.querySelector('.form-control__select-text');
       if (selectText && selectText.textContent.includes('ящиків')) {
-        selectText.innerHTML = selectText.innerHTML.replace('ящиків', '').replace(/\s+:/, ':'); // аккуратно убираем лишнее
+        selectText.innerHTML = selectText.innerHTML.replace('ящиків', '').replace(/\s+:/, ':');
       }
     }
   });
@@ -178,6 +158,51 @@ function checkExtraItems() {
   }
 }
 
+function addInfoIcon(target, message) {
+  if (target && !target.querySelector('.disabled-info-icon')) {
+    const icon = document.createElement('span');
+    icon.className = 'disabled-info-icon';
+    icon.textContent = '❓';
+    icon.style.marginLeft = '8px';
+    icon.style.color = 'red';
+    icon.style.fontWeight = 'bold';
+    icon.title = message;
+    target.appendChild(icon);
+  }
+}
+
+function disableCartControls() {
+  const couponBlock = document.querySelector('.ec-cart__coupon.ec-cart-coupon');
+  const shoppingBlock = document.querySelector('.ec-cart__shopping.ec-cart-shopping');
+
+  const message = MSG.DISABLED_CONTROL_HINT;
+
+  if (couponBlock) {
+    couponBlock.style.pointerEvents = 'none';
+    couponBlock.style.opacity = '0.5';
+    couponBlock.title = message;
+    addInfoIcon(couponBlock, message);
+  }
+
+  if (shoppingBlock) {
+    shoppingBlock.style.pointerEvents = 'none';
+    shoppingBlock.style.opacity = '0.5';
+    shoppingBlock.title = message;
+    addInfoIcon(shoppingBlock, message);
+  }
+
+  // Добавляем встроенный CSS для hover-анимации
+  const style = document.createElement('style');
+  style.innerHTML = `
+    .ec-cart__coupon.ec-cart-coupon:hover,
+    .ec-cart__shopping.ec-cart-shopping:hover {
+      opacity: 0.7 !important;
+      transition: opacity 0.3s ease;
+      cursor: not-allowed !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 // == Подключение ==
 waitEcwid(() => {
@@ -187,7 +212,7 @@ waitEcwid(() => {
         updateQuantityText();
         validateCartItems();
         checkExtraItems();
-        disableCartControls(); // ⬅️ Добавлено
+        disableCartControls();
       }, 300);
     });
 
@@ -197,7 +222,7 @@ waitEcwid(() => {
           updateQuantityText();
           validateCartItems();
           checkExtraItems();
-          disableCartControls(); // ⬅️ Добавлено
+          disableCartControls();
         }, 500);
       }
     });
