@@ -13,13 +13,13 @@ var MSG = {
   PRODUCT_URL: '/Yaschik-ekstrakta-polisolodovogo-550g-15banok-p717719689',
   PRODUCT_TITLE: 'Ящик екстракту полісолодового (15бан./550г) в асортименті:',
   BOX_TEXT: '&nbsp;ящиків',
-  ALERT_EXTRA_ITEMS: 'У кошику, крім товару за акцією, знаходяться інші товари.\n\nБудь ласка, видаліть інші товари або оформіть їх окремим замовленням.',
+  ALERT_EXTRA_ITEMS: 'У кошику, окрім ящика, знаходяться інші товари.\nЦе не дозволено — будь ласка, видаліть інші товари або оформіть окреме замовлення.',
   LINK_TEXT_REMOVE: '❌ Видалити товар з кошика'
 };
 
 var lastAlertTime = 0;
 
-// == Вспомогательные ==
+// == Функции ==
 function waitEcwid(callback) {
   if (typeof Ecwid !== 'undefined' && typeof Ecwid.OnAPILoaded !== 'undefined') {
     callback();
@@ -28,17 +28,15 @@ function waitEcwid(callback) {
   }
 }
 
-function modifyBoxText() {
-  const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
-  items.forEach(item => {
-    const titleEl = item.querySelector('.ec-cart-item__title');
-    const qtyText = item.querySelector('.form-control__select-text');
+function updateQuantityText() {
+  const hasBoxProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
+    .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE);
 
-    if (titleEl && qtyText && titleEl.textContent.trim() === MSG.PRODUCT_TITLE) {
-      // Вставляем слово только если его ещё нет
-      if (!qtyText.innerHTML.includes(MSG.BOX_TEXT)) {
-        qtyText.innerHTML = qtyText.innerHTML.replace(':', `${MSG.BOX_TEXT}:`);
-      }
+  if (!hasBoxProduct) return;
+
+  document.querySelectorAll('.form-control__select-text').forEach(el => {
+    if (el.textContent.includes(':') && !el.textContent.includes('ящиків')) {
+      el.innerHTML = el.textContent.replace(':', `${MSG.BOX_TEXT}:`);
     }
   });
 }
@@ -149,23 +147,23 @@ function checkExtraItems() {
 // == Подключение ==
 waitEcwid(() => {
   Ecwid.OnAPILoaded.add(() => {
-    Ecwid.OnCartChanged.add(() => {
+    Ecwid.OnCartChanged.add(function () {
       setTimeout(() => {
+        updateQuantityText();
         validateCartItems();
         checkExtraItems();
-        modifyBoxText(); // теперь вызывается каждый раз
       }, 300);
-      setTimeout(modifyBoxText, 1000); // Повторный вызов — на случай поздней перерисовки DOM
     });
 
     Ecwid.OnPageLoaded.add(page => {
       if (page.type === "CART") {
         setTimeout(() => {
+          updateQuantityText();
           validateCartItems();
           checkExtraItems();
-          modifyBoxText();
         }, 500);
       }
     });
   });
 });
+
