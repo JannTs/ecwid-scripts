@@ -117,6 +117,12 @@ function checkExtraItems() {
     return title && title !== MSG.PRODUCT_TITLE;
   });
 
+  // 🔒 Блокировка чекбокса, если есть лишние товары
+  const checkbox = document.getElementById('form-control__checkbox--agree');
+  if (checkbox) {
+    checkbox.disabled = extraItems.length > 0;
+  }
+
   extraItems.forEach(item => {
     if (!item.querySelector('.ec-remove-link-marker')) {
       const linkDiv = document.createElement('div');
@@ -143,6 +149,7 @@ function checkExtraItems() {
     lastAlertTime = Date.now();
   }
 }
+
 
 // == Подключение ==
 waitEcwid(() => {
