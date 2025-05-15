@@ -13,7 +13,7 @@ var MSG = {
   PRODUCT_URL: '/Yaschik-ekstrakta-polisolodovogo-550g-15banok-p717719689',
   PRODUCT_TITLE: 'Ящик екстракту полісолодового (15бан./550г) в асортименті:',
   BOX_TEXT: '&nbsp;ящиків',
-  ALERT_EXTRA_ITEMS: 'У кошику, крім товару за акцією, знаходяться інші товари.\n\nБудь ласка, видаліть інші товари або оформіть їх окремим замовленням.',
+  ALERT_EXTRA_ITEMS: 'У кошику, окрім ящика, знаходяться інші товари.\nЦе не дозволено — будь ласка, видаліть інші товари або оформіть окреме замовлення.',
   LINK_TEXT_REMOVE: '❌ Видалити товар з кошика'
 };
 
@@ -29,14 +29,18 @@ function waitEcwid(callback) {
 }
 
 function updateQuantityText() {
-  const hasBoxProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
-    .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE);
+  const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
 
-  if (!hasBoxProduct) return;
+  items.forEach(item => {
+    const titleEl = item.querySelector('.ec-cart-item__title');
+    const textEl = item.querySelector('.form-control__select-text');
+    if (!titleEl || !textEl) return;
 
-  document.querySelectorAll('.form-control__select-text').forEach(el => {
-    if (el.textContent.includes(':') && !el.textContent.includes('ящиків')) {
-      el.innerHTML = el.textContent.replace(':', `${MSG.BOX_TEXT}:`);
+    const title = titleEl.textContent.trim();
+    if (title === MSG.PRODUCT_TITLE) {
+      if (textEl.textContent.includes(':') && !textEl.textContent.includes('ящиків')) {
+        textEl.innerHTML = textEl.textContent.replace(':', `${MSG.BOX_TEXT}:`);
+      }
     }
   });
 }
