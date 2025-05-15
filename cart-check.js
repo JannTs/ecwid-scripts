@@ -42,6 +42,37 @@ function updateQuantityText() {
   });
 }
 
+function showCustomTooltip(target, message) {
+  const tooltip = document.createElement('div');
+  tooltip.className = 'custom-disabled-tooltip';
+  tooltip.textContent = message;
+
+  // Базовые стили
+  tooltip.style.position = 'absolute';
+  tooltip.style.background = '#333';
+  tooltip.style.color = '#fff';
+  tooltip.style.padding = '6px 10px';
+  tooltip.style.borderRadius = '4px';
+  tooltip.style.fontSize = '13px';
+  tooltip.style.whiteSpace = 'nowrap';
+  tooltip.style.zIndex = '9999';
+  tooltip.style.top = `${target.getBoundingClientRect().top + window.scrollY - 35}px`;
+  tooltip.style.left = `${target.getBoundingClientRect().left + window.scrollX}px`;
+  tooltip.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
+  tooltip.style.pointerEvents = 'none';
+
+  document.body.appendChild(tooltip);
+  target._tooltip = tooltip;
+}
+
+function hideCustomTooltip(target) {
+  if (target._tooltip) {
+    document.body.removeChild(target._tooltip);
+    delete target._tooltip;
+  }
+}
+
+
 function validateCartItems() {
   let total = 0;
   const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
@@ -183,45 +214,37 @@ function addInfoIcon(target, message) {
 function disableCartControls() {
   const couponBlock = document.querySelector('.ec-cart__coupon.ec-cart-coupon');
   const shoppingBlock = document.querySelector('.ec-cart__shopping.ec-cart-shopping');
-
   const message = MSG.DISABLED_CONTROL_HINT;
 
   if (couponBlock) {
     couponBlock.style.pointerEvents = 'none';
     couponBlock.style.opacity = '0.5';
-    couponBlock.setAttribute('title', message);
-    couponBlock.setAttribute('aria-label', message);
+    const link = couponBlock.querySelector('a');
+    if (link) {
+      link.style.pointerEvents = 'auto'; // Разрешить события только на ссылке
+      link.style.cursor = 'not-allowed';
+      link.addEventListener('mouseenter', () => showCustomTooltip(link, message));
+      link.addEventListener('mouseleave', () => hideCustomTooltip(link));
+    }
   }
 
   if (shoppingBlock) {
     shoppingBlock.style.pointerEvents = 'none';
     shoppingBlock.style.opacity = '0.5';
-    shoppingBlock.setAttribute('title', message);
-    shoppingBlock.setAttribute('aria-label', message);
+    const link = shoppingBlock.querySelector('a');
+    if (link) {
+      link.style.pointerEvents = 'auto';
+      link.style.cursor = 'not-allowed';
+      link.addEventListener('mouseenter', () => showCustomTooltip(link, message));
+      link.addEventListener('mouseleave', () => hideCustomTooltip(link));
+    }
   }
 
-  // Вставляем безопасный CSS-анимацию и иконку ❓ через ::after
-  const style = document.createElement('style');
-  style.innerHTML = `
-    .ec-cart__coupon.ec-cart-coupon:hover,
-    .ec-cart__shopping.ec-cart-shopping:hover {
-      opacity: 0.7 !important;
-      transition: opacity 0.3s ease;
-      cursor: not-allowed !important;
-    }
-
-    .ec-cart__coupon.ec-cart-coupon::after,
-    .ec-cart__shopping.ec-cart-shopping::after {
-      content: " ❓";
-      color: red;
-      font-weight: bold;
-      font-size: 16px;
-      margin-left: 6px;
-      vertical-align: middle;
-    }
-  `;
-  document.head.appendChild(style);
+  // Удаляем CSS ::after (на всякий случай, если был ранее внедрён)
+  //const prevStyle = document.querySelector('#custom-disable-style');
+  //if (prevStyle) prevStyle.remove();
 }
+
 
 
 // == Подключение ==
