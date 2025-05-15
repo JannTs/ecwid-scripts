@@ -13,7 +13,7 @@ var MSG = {
   PRODUCT_URL: '/Yaschik-ekstrakta-polisolodovogo-550g-15banok-p717719689',
   PRODUCT_TITLE: 'Ящик екстракту полісолодового (15бан./550г) в асортименті:',
   BOX_TEXT: '&nbsp;ящиків',
-  ALERT_EXTRA_ITEMS: 'Це спеціальний кошик для акційного товару.&nbsp;Він діє лише для:\n"Ящик екстракту полісолодового (15бан./550г) в асортименті"\n\nОднак наразі у кошику є інші товари. Це порушує умови акції — будь ласка:\n✔ Видаліть зайві позиції або ✔ Оформіть їх окремим замовленням',
+  ALERT_EXTRA_ITEMS: 'Це спеціальний кошик для акційного товару. Він діє лише для:\n"Ящик екстракту полісолодового (15бан./550г) в асортименті"\n\nОднак наразі у кошику є інші товари. Це порушує умови акції — будь ласка:\n✔ Видаліть зайві позиції або ✔ Оформіть їх окремим замовленням',
   LINK_TEXT_REMOVE: '❌ Видалити товар з кошика'
 };
 
@@ -27,6 +27,24 @@ function waitEcwid(callback) {
     setTimeout(() => waitEcwid(callback), 100);
   }
 }
+
+function disableCartControls() {
+  const couponBlock = document.querySelector('.ec-cart__coupon.ec-cart-coupon');
+  const shoppingBlock = document.querySelector('.ec-cart__shopping.ec-cart-shopping');
+
+  if (couponBlock) {
+    couponBlock.style.pointerEvents = 'none';
+    couponBlock.style.opacity = '0.5';
+    couponBlock.title = 'Недоступно для замовлення';
+  }
+
+  if (shoppingBlock) {
+    shoppingBlock.style.pointerEvents = 'none';
+    shoppingBlock.style.opacity = '0.5';
+    shoppingBlock.title = 'Ця дія недоступна при цьому замовленні';
+  }
+}
+
 
 function updateQuantityText() {
   const hasBoxProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
@@ -169,6 +187,7 @@ waitEcwid(() => {
         updateQuantityText();
         validateCartItems();
         checkExtraItems();
+        disableCartControls(); // ⬅️ Добавлено
       }, 300);
     });
 
@@ -178,6 +197,7 @@ waitEcwid(() => {
           updateQuantityText();
           validateCartItems();
           checkExtraItems();
+          disableCartControls(); // ⬅️ Добавлено
         }, 500);
       }
     });
