@@ -159,17 +159,26 @@ function checkExtraItems() {
 }
 
 function addInfoIcon(target, message) {
-  if (target && !target.querySelector('.disabled-info-icon')) {
+  if (target && !target.nextElementSibling?.classList?.contains('disabled-info-icon-wrapper')) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'disabled-info-icon-wrapper';
+    wrapper.style.display = 'inline-block';
+    wrapper.style.marginLeft = '8px';
+
     const icon = document.createElement('span');
     icon.className = 'disabled-info-icon';
     icon.textContent = '❓';
-    icon.style.marginLeft = '8px';
+    icon.title = message;
+    icon.style.cursor = 'help';
     icon.style.color = 'red';
     icon.style.fontWeight = 'bold';
-    icon.title = message;
-    target.appendChild(icon);
+    icon.style.fontSize = '18px';
+
+    wrapper.appendChild(icon);
+    target.parentNode.insertBefore(wrapper, target.nextSibling);
   }
 }
+
 
 function disableCartControls() {
   const couponBlock = document.querySelector('.ec-cart__coupon.ec-cart-coupon');
@@ -191,7 +200,7 @@ function disableCartControls() {
     addInfoIcon(shoppingBlock, message);
   }
 
-  // Добавляем встроенный CSS для hover-анимации
+  // Анимация
   const style = document.createElement('style');
   style.innerHTML = `
     .ec-cart__coupon.ec-cart-coupon:hover,
@@ -203,6 +212,7 @@ function disableCartControls() {
   `;
   document.head.appendChild(style);
 }
+
 
 // == Подключение ==
 waitEcwid(() => {
