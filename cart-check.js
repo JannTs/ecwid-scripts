@@ -28,28 +28,30 @@ function waitEcwid(callback) {
   }
 }
 
-function updateQuantityText() {
-  const maxAttempts = 10;
-  let attempts = 0;
+// Используем MutationObserver вместо setInterval
+function observeQuantityChanges() {
+  const container = document.querySelector('.ec-cart');
+  if (!container) return;
 
-  const interval = setInterval(() => {
+  const observer = new MutationObserver(() => {
     const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
-
     items.forEach(item => {
       const titleEl = item.querySelector('.ec-cart-item__title');
       const textEl = item.querySelector('.form-control__select-text');
       if (!titleEl || !textEl) return;
 
       const title = titleEl.textContent.trim();
-      if (title === MSG.PRODUCT_TITLE) {
-        // Принудительная замена без условий
-        textEl.innerHTML = textEl.textContent.replace(/:\s*$/, `${MSG.BOX_TEXT}:`).replace(':', `${MSG.BOX_TEXT}:`);
+      if (title === MSG.PRODUCT_TITLE && !textEl.innerHTML.includes(MSG.BOX_TEXT)) {
+        textEl.innerHTML = textEl.textContent.replace(':', `${MSG.BOX_TEXT}:`);
       }
     });
+  });
 
-    attempts++;
-    if (attempts >= maxAttempts) clearInterval(interval);
-  }, 100);
+  observer.observe(container, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
 }
 
 function validateCartItems() {
@@ -160,18 +162,18 @@ waitEcwid(() => {
   Ecwid.OnAPILoaded.add(() => {
     Ecwid.OnCartChanged.add(function () {
       setTimeout(() => {
-        updateQuantityText();
         validateCartItems();
         checkExtraItems();
+        observeQuantityChanges();
       }, 300);
     });
 
     Ecwid.OnPageLoaded.add(page => {
       if (page.type === "CART") {
         setTimeout(() => {
-          updateQuantityText();
           validateCartItems();
           checkExtraItems();
+          observeQuantityChanges();
         }, 500);
       }
     });
