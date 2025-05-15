@@ -29,21 +29,34 @@ function waitEcwid(callback) {
 }
 
 function updateQuantityText() {
-  const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
+  const maxAttempts = 10;
+  let attempts = 0;
 
-  items.forEach(item => {
-    const titleEl = item.querySelector('.ec-cart-item__title');
-    const textEl = item.querySelector('.form-control__select-text');
-    if (!titleEl || !textEl) return;
+  const interval = setInterval(() => {
+    const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
+    let updated = false;
 
-    const title = titleEl.textContent.trim();
-    if (title === MSG.PRODUCT_TITLE) {
-      if (textEl.textContent.includes(':') && !textEl.textContent.includes('ящиків')) {
-        textEl.innerHTML = textEl.textContent.replace(':', `${MSG.BOX_TEXT}:`);
+    items.forEach(item => {
+      const titleEl = item.querySelector('.ec-cart-item__title');
+      const textEl = item.querySelector('.form-control__select-text');
+      if (!titleEl || !textEl) return;
+
+      const title = titleEl.textContent.trim();
+      if (title === MSG.PRODUCT_TITLE) {
+        if (textEl.textContent.includes(':') && !textEl.textContent.includes('ящиків')) {
+          textEl.innerHTML = textEl.textContent.replace(':', `${MSG.BOX_TEXT}:`);
+          updated = true;
+        }
       }
+    });
+
+    attempts++;
+    if (updated || attempts >= maxAttempts) {
+      clearInterval(interval);
     }
-  });
+  }, 100);
 }
+
 
 function validateCartItems() {
   let total = 0;
