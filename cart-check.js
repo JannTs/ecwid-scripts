@@ -189,18 +189,18 @@ function disableCartControls() {
   if (couponBlock) {
     couponBlock.style.pointerEvents = 'none';
     couponBlock.style.opacity = '0.5';
-    couponBlock.title = message;
-    addInfoIcon(couponBlock, message);
+    couponBlock.setAttribute('title', message);
+    couponBlock.setAttribute('aria-label', message);
   }
 
   if (shoppingBlock) {
     shoppingBlock.style.pointerEvents = 'none';
     shoppingBlock.style.opacity = '0.5';
-    shoppingBlock.title = message;
-    addInfoIcon(shoppingBlock, message);
+    shoppingBlock.setAttribute('title', message);
+    shoppingBlock.setAttribute('aria-label', message);
   }
 
-  // Анимация
+  // Вставляем безопасный CSS-анимацию и иконку ❓ через ::after
   const style = document.createElement('style');
   style.innerHTML = `
     .ec-cart__coupon.ec-cart-coupon:hover,
@@ -208,6 +208,16 @@ function disableCartControls() {
       opacity: 0.7 !important;
       transition: opacity 0.3s ease;
       cursor: not-allowed !important;
+    }
+
+    .ec-cart__coupon.ec-cart-coupon::after,
+    .ec-cart__shopping.ec-cart-shopping::after {
+      content: " ❓";
+      color: red;
+      font-weight: bold;
+      font-size: 16px;
+      margin-left: 6px;
+      vertical-align: middle;
     }
   `;
   document.head.appendChild(style);
