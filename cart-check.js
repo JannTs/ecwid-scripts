@@ -216,34 +216,34 @@ function disableCartControls() {
   const shoppingBlock = document.querySelector('.ec-cart__shopping.ec-cart-shopping');
   const message = MSG.DISABLED_CONTROL_HINT;
 
-  if (couponBlock) {
-    couponBlock.style.pointerEvents = 'none';
-    couponBlock.style.opacity = '0.5';
-    const link = couponBlock.querySelector('a');
-    if (link) {
-      link.style.pointerEvents = 'auto'; // Разрешить события только на ссылке
-      link.style.cursor = 'not-allowed';
-      link.addEventListener('mouseenter', () => showCustomTooltip(link, message));
-      link.addEventListener('mouseleave', () => hideCustomTooltip(link));
-    }
-  }
-
-  if (shoppingBlock) {
-    shoppingBlock.style.pointerEvents = 'none';
-    shoppingBlock.style.opacity = '0.5';
-    const link = shoppingBlock.querySelector('a');
+  function setupLinkTooltip(block) {
+    const link = block?.querySelector('a');
     if (link) {
       link.style.pointerEvents = 'auto';
       link.style.cursor = 'not-allowed';
       link.addEventListener('mouseenter', () => showCustomTooltip(link, message));
       link.addEventListener('mouseleave', () => hideCustomTooltip(link));
+      link.addEventListener('click', (e) => e.preventDefault()); // 🚫 Блокируем переход
     }
   }
 
-  // Удаляем CSS ::after (на всякий случай, если был ранее внедрён)
-  //const prevStyle = document.querySelector('#custom-disable-style');
-  //if (prevStyle) prevStyle.remove();
+  if (couponBlock) {
+    couponBlock.style.pointerEvents = 'none';
+    couponBlock.style.opacity = '0.5';
+    setupLinkTooltip(couponBlock);
+  }
+
+  if (shoppingBlock) {
+    shoppingBlock.style.pointerEvents = 'none';
+    shoppingBlock.style.opacity = '0.5';
+    setupLinkTooltip(shoppingBlock);
+  }
+
+  // Удаление старого стиля, если есть
+  const prevStyle = document.querySelector('#custom-disable-style');
+  if (prevStyle) prevStyle.remove();
 }
+
 
 
 
