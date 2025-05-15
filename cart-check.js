@@ -29,6 +29,10 @@ function waitEcwid(callback) {
   }
 }
 
+window.addEventListener('beforeunload', () => {
+  document.querySelectorAll('.custom-disabled-tooltip').forEach(t => t.remove());
+});
+
 function updateQuantityText() {
   const hasBoxProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
     .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE);
@@ -217,15 +221,29 @@ function disableCartControls() {
   const message = MSG.DISABLED_CONTROL_HINT;
 
   function setupLinkTooltip(block) {
-    const link = block?.querySelector('a');
-    if (link) {
-      link.style.pointerEvents = 'auto';
-      link.style.cursor = 'not-allowed';
-      link.addEventListener('mouseenter', () => showCustomTooltip(link, message));
-      link.addEventListener('mouseleave', () => hideCustomTooltip(link));
-      link.addEventListener('click', (e) => e.preventDefault()); // 🚫 Блокируем переход
-    }
+  const link = block?.querySelector('a');
+  if (link) {
+    link.style.pointerEvents = 'auto';
+    link.style.cursor = 'not-allowed';
+
+    // Удаляем уже существующий обработчик, если есть
+    link.removeEventListener('click', link._preventClickHandler);
+    
+    // Новый обработчик с жёсткой блокировкой
+    const preventClickHandler = function (e) {
+      e.preventDefault();
+      e.stopImmediatePropagation(); // 💣 блокирует даже переопределённые Ecwid обработчики
+      return false;
+    };
+
+    link.addEventListener('click', preventClickHandler);
+    link._preventClickHandler = preventClickHandler;
+
+    link.addEventListener('mouseenter', () => showCustomTooltip(link, MSG.DISABLED_CONTROL_HINT));
+    link.addEventListener('mouseleave', () => hideCustomTooltip(link));
   }
+}
+
 
   if (couponBlock) {
     couponBlock.style.pointerEvents = 'none';
