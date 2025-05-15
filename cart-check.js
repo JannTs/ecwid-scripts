@@ -34,7 +34,6 @@ function updateQuantityText() {
 
   const interval = setInterval(() => {
     const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
-    let updated = false;
 
     items.forEach(item => {
       const titleEl = item.querySelector('.ec-cart-item__title');
@@ -43,20 +42,15 @@ function updateQuantityText() {
 
       const title = titleEl.textContent.trim();
       if (title === MSG.PRODUCT_TITLE) {
-        if (textEl.textContent.includes(':') && !textEl.textContent.includes('ящиків')) {
-          textEl.innerHTML = textEl.textContent.replace(':', `${MSG.BOX_TEXT}:`);
-          updated = true;
-        }
+        // Принудительная замена без условий
+        textEl.innerHTML = textEl.textContent.replace(/:\s*$/, `${MSG.BOX_TEXT}:`).replace(':', `${MSG.BOX_TEXT}:`);
       }
     });
 
     attempts++;
-    if (updated || attempts >= maxAttempts) {
-      clearInterval(interval);
-    }
+    if (attempts >= maxAttempts) clearInterval(interval);
   }, 100);
 }
-
 
 function validateCartItems() {
   let total = 0;
