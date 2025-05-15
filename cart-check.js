@@ -155,6 +155,7 @@ waitEcwid(() => {
         checkExtraItems();
         modifyBoxText(); // теперь вызывается каждый раз
       }, 300);
+      setTimeout(modifyBoxText, 1000); // Повторный вызов — на случай поздней перерисовки DOM
     });
 
     Ecwid.OnPageLoaded.add(page => {
