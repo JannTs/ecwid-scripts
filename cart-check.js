@@ -320,6 +320,7 @@ waitEcwid(() => {
         initControlInterceptors(); // 👈 сюда (15-05-205)
         addDomNoticeForBlockedOptions(); // 👈 добавляем визуальную подсказку (16-05-205)
         disableCouponPlaceholderText(); // ⬅️ добавлено (16-05-205)
+        console.log(JSON.stringify(cart));
       }, 300);
     });
 
