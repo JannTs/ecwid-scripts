@@ -50,8 +50,6 @@ function showCustomTooltip(target, message) {
   const tooltip = document.createElement('div');
   tooltip.className = 'custom-disabled-tooltip';
   tooltip.textContent = message;
-
-  // Базовые стили
   tooltip.style.position = 'absolute';
   tooltip.style.background = '#333';
   tooltip.style.color = '#fff';
@@ -64,7 +62,6 @@ function showCustomTooltip(target, message) {
   tooltip.style.left = `${target.getBoundingClientRect().left + window.scrollX}px`;
   tooltip.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
   tooltip.style.pointerEvents = 'none';
-
   document.body.appendChild(tooltip);
   target._tooltip = tooltip;
 }
@@ -75,7 +72,6 @@ function hideCustomTooltip(target) {
     delete target._tooltip;
   }
 }
-
 
 function validateCartItems() {
   let total = 0;
@@ -193,57 +189,34 @@ function checkExtraItems() {
   }
 }
 
-function addInfoIcon(target, message) {
-  if (target && !target.nextElementSibling?.classList?.contains('disabled-info-icon-wrapper')) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'disabled-info-icon-wrapper';
-    wrapper.style.display = 'inline-block';
-    wrapper.style.marginLeft = '8px';
-
-    const icon = document.createElement('span');
-    icon.className = 'disabled-info-icon';
-    icon.textContent = '❓';
-    icon.title = message;
-    icon.style.cursor = 'help';
-    icon.style.color = 'red';
-    icon.style.fontWeight = 'bold';
-    icon.style.fontSize = '18px';
-
-    wrapper.appendChild(icon);
-    target.parentNode.insertBefore(wrapper, target.nextSibling);
-  }
-}
-
-
 function disableCartControls() {
   const couponBlock = document.querySelector('.ec-cart__coupon.ec-cart-coupon');
   const shoppingBlock = document.querySelector('.ec-cart__shopping.ec-cart-shopping');
   const message = MSG.DISABLED_CONTROL_HINT;
 
   function setupLinkTooltip(block) {
-  const link = block?.querySelector('a');
-  if (link) {
-    link.style.pointerEvents = 'auto';
-    link.style.cursor = 'not-allowed';
+    const link = block?.querySelector('a');
+    if (link) {
+      link.style.pointerEvents = 'auto';
+      link.style.cursor = 'not-allowed';
 
-    // Удаляем уже существующий обработчик, если есть
-    link.removeEventListener('click', link._preventClickHandler);
-    
-    // Новый обработчик с жёсткой блокировкой
-    const preventClickHandler = function (e) {
-      e.preventDefault();
-      e.stopImmediatePropagation(); // 💣 блокирует даже переопределённые Ecwid обработчики
-      return false;
-    };
+      // Удаляем старый обработчик (если был)
+      link.removeEventListener('click', link._preventClickHandler);
 
-    link.addEventListener('click', preventClickHandler);
-    link._preventClickHandler = preventClickHandler;
+      // Блокируем клик
+      const preventClickHandler = function (e) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return false;
+      };
 
-    link.addEventListener('mouseenter', () => showCustomTooltip(link, MSG.DISABLED_CONTROL_HINT));
-    link.addEventListener('mouseleave', () => hideCustomTooltip(link));
+      link.addEventListener('click', preventClickHandler);
+      link._preventClickHandler = preventClickHandler;
+
+      link.addEventListener('mouseenter', () => showCustomTooltip(link, message));
+      link.addEventListener('mouseleave', () => hideCustomTooltip(link));
+    }
   }
-}
-
 
   if (couponBlock) {
     couponBlock.style.pointerEvents = 'none';
@@ -256,19 +229,12 @@ function disableCartControls() {
     shoppingBlock.style.opacity = '0.5';
     setupLinkTooltip(shoppingBlock);
   }
-
-  // Удаление старого стиля, если есть
-  const prevStyle = document.querySelector('#custom-disable-style');
-  if (prevStyle) prevStyle.remove();
 }
-
-
-
 
 // == Подключение ==
 waitEcwid(() => {
   Ecwid.OnAPILoaded.add(() => {
-    Ecwid.OnCartChanged.add(function () {
+    Ecwid.OnCartChanged.add(() => {
       setTimeout(() => {
         updateQuantityText();
         validateCartItems();
@@ -289,3 +255,4 @@ waitEcwid(() => {
     });
   });
 });
+
