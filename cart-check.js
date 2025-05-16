@@ -85,6 +85,7 @@ function initControlInterceptors() {
 
 
 function showCustomTooltip(target, message) {
+  return; // 🔕 временно отключено
   const tooltip = document.createElement('div');
   tooltip.className = 'custom-disabled-tooltip';
   tooltip.textContent = message;
