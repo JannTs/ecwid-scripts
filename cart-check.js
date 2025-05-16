@@ -55,23 +55,33 @@ function initControlInterceptors() {
       if (link && !link.dataset.blocked) {
         link.dataset.blocked = 'true';
         link.style.cursor = 'not-allowed';
+
+        // Самое важное: удаляем href, если можно
+        link.setAttribute('href', 'javascript:void(0)');
+        link.removeAttribute('onclick');
+
+        // Tooltip
+        link.addEventListener('mouseenter', () => showCustomTooltip(link, message));
+        link.addEventListener('mouseleave', () => hideCustomTooltip(link));
+
+        // На всякий случай — полный запрет действий
         link.addEventListener('click', function (e) {
           e.preventDefault();
           e.stopImmediatePropagation();
+          return false;
         });
-        link.addEventListener('mouseenter', () => showCustomTooltip(link, message));
-        link.addEventListener('mouseleave', () => hideCustomTooltip(link));
       }
     });
   };
 
-  // 1. Проверка сразу
+  // Первый запуск
   tryIntercept();
 
-  // 2. Отслеживаем динамические изменения в DOM (перерисовка Ecwid)
+  // Следим за DOM (Ecwid может перерендерить корзину)
   const observer = new MutationObserver(() => tryIntercept());
   observer.observe(document.body, { childList: true, subtree: true });
 }
+
 
 
 function showCustomTooltip(target, message) {
