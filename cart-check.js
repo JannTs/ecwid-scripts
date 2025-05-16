@@ -46,6 +46,34 @@ function updateQuantityText() {
   });
 }
 
+function addDomNoticeForBlockedOptions() {
+  const couponBlock = document.querySelector('.ec-cart__coupon.ec-cart-coupon');
+  const shoppingBlock = document.querySelector('.ec-cart__shopping.ec-cart-shopping');
+  const localizedMessage = '🔕 Ці опції тимчасово недоступні — кошик вже містить акційний товар.';
+
+  // Добавить префикс к заголовкам
+  const titleSpans = document.querySelectorAll('.ec-cart__coupon .ec-cart__title, .ec-cart__shopping .ec-cart__title');
+  titleSpans.forEach(title => {
+    if (!title.dataset.modified) {
+      title.textContent = `🔕 ${title.textContent}`;
+      title.dataset.modified = 'true';
+    }
+  });
+
+  // Вставить пояснение после shoppingBlock (если еще не вставлено)
+  if (shoppingBlock && !document.querySelector('.ec-disabled-options-note')) {
+    const note = document.createElement('div');
+    note.className = 'ec-disabled-options-note';
+    note.textContent = localizedMessage;
+    note.style.fontSize = '13px';
+    note.style.color = '#888';
+    note.style.marginTop = '8px';
+    note.style.marginBottom = '12px';
+    shoppingBlock.parentNode.insertBefore(note, shoppingBlock.nextSibling);
+  }
+}
+
+
 function initControlInterceptors() {
   const message = MSG.DISABLED_CONTROL_HINT;
 
@@ -279,7 +307,8 @@ waitEcwid(() => {
         validateCartItems();
         checkExtraItems();
         disableCartControls();
-        initControlInterceptors(); // 👈 сюда
+        initControlInterceptors(); // 👈 сюда (15-05-205)
+        addDomNoticeForBlockedOptions(); // 👈 добавляем визуальную подсказку (16-05-205)
       }, 300);
     });
 
@@ -290,7 +319,8 @@ waitEcwid(() => {
           validateCartItems();
           checkExtraItems();
           disableCartControls();
-          initControlInterceptors(); // 👈 сюда
+          initControlInterceptors(); // 👈 сюда (15-05-205)
+          addDomNoticeForBlockedOptions(); // 👈 добавляем визуальную подсказку (16-05-205)
         }, 500);
       }
     });
