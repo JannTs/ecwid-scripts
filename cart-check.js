@@ -46,6 +46,16 @@ function updateQuantityText() {
   });
 }
 
+function disableCouponPlaceholderText() {
+  const placeholder = document.querySelector('.ec-cart__coupon .form-control__placeholder-inner');
+
+  if (placeholder && !placeholder.dataset.modified) {
+    placeholder.textContent = '🔕 Тут код не діє';
+    placeholder.dataset.modified = 'true'; // предотвратим повторную подмену
+  }
+}
+
+
 function addDomNoticeForBlockedOptions() {
   const couponBlock = document.querySelector('.ec-cart__coupon.ec-cart-coupon');
   const shoppingBlock = document.querySelector('.ec-cart__shopping.ec-cart-shopping');
@@ -309,6 +319,7 @@ waitEcwid(() => {
         disableCartControls();
         initControlInterceptors(); // 👈 сюда (15-05-205)
         addDomNoticeForBlockedOptions(); // 👈 добавляем визуальную подсказку (16-05-205)
+        disableCouponPlaceholderText(); // ⬅️ добавлено (16-05-205)
       }, 300);
     });
 
@@ -321,6 +332,7 @@ waitEcwid(() => {
           disableCartControls();
           initControlInterceptors(); // 👈 сюда (15-05-205)
           addDomNoticeForBlockedOptions(); // 👈 добавляем визуальную подсказку (16-05-205)
+          disableCouponPlaceholderText(); // ⬅️ добавлено (16-05-205)
         }, 500);
       }
     });
