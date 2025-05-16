@@ -46,6 +46,34 @@ function updateQuantityText() {
   });
 }
 
+function initControlInterceptors() {
+  const message = MSG.DISABLED_CONTROL_HINT;
+
+  const tryIntercept = () => {
+    ['.ec-cart__coupon a', '.ec-cart__shopping a'].forEach(selector => {
+      const link = document.querySelector(selector);
+      if (link && !link.dataset.blocked) {
+        link.dataset.blocked = 'true';
+        link.style.cursor = 'not-allowed';
+        link.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        });
+        link.addEventListener('mouseenter', () => showCustomTooltip(link, message));
+        link.addEventListener('mouseleave', () => hideCustomTooltip(link));
+      }
+    });
+  };
+
+  // 1. Проверка сразу
+  tryIntercept();
+
+  // 2. Отслеживаем динамические изменения в DOM (перерисовка Ecwid)
+  const observer = new MutationObserver(() => tryIntercept());
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+
 function showCustomTooltip(target, message) {
   const tooltip = document.createElement('div');
   tooltip.className = 'custom-disabled-tooltip';
@@ -240,6 +268,7 @@ waitEcwid(() => {
         validateCartItems();
         checkExtraItems();
         disableCartControls();
+        initControlInterceptors(); // 👈 сюда
       }, 300);
     });
 
@@ -250,6 +279,7 @@ waitEcwid(() => {
           validateCartItems();
           checkExtraItems();
           disableCartControls();
+          initControlInterceptors(); // 👈 сюда
         }, 500);
       }
     });
