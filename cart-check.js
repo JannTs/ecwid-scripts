@@ -195,10 +195,10 @@ const BULK = {
       notice.style.fontSize = '14px';
       notice.innerHTML = `
         ⚠️ Формування партії наразі некоректне:<br>
-        ${!same ? '• Усі позиції мають містити однакову кількість банок<br>' : ''}
+        ${!same ? '• Кожен вид Полісолу може належати лише до партії одного розміру<br>' : ''}
         ${(sum !== sizes[0]) ? `• Загальна кількість банок: ${sum}, очікується: ${sizes[0]}<br>` : ''}
         ${extraItems ? '• У кошику є зайві товари<br>' : ''}
-        <a href="${MSG.bulk.PRODUCT_URL}" style="color: blue;">➕ Додати інгредієнт</a>
+        <a href="${MSG.bulk.PRODUCT_URL}" style="color: blue;">➕ Додати ще банок до ${sizes[0]} шт.</a>
       `;
       document.querySelector('.ec-cart__products-inner')?.appendChild(notice);
     }
