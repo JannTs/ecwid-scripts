@@ -242,11 +242,20 @@ function waitEcwid(callback) {
   }
 }
 
+let isCartPage = false;
+
 waitEcwid(() => {
   Ecwid.OnAPILoaded.add(() => {
-    Ecwid.OnCartChanged.add(() => setTimeout(runLogic, 300));
     Ecwid.OnPageLoaded.add(page => {
-      if (page.type === 'CART') setTimeout(runLogic, 500);
+      isCartPage = page.type === 'CART';
+      if (isCartPage) {
+        setTimeout(runLogic, 500);
+      }
+    });
+
+    Ecwid.OnCartChanged.add(() => {
+      if (!isCartPage) return;
+      setTimeout(runLogic, 300);
     });
   });
 });
