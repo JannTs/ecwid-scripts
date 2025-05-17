@@ -308,36 +308,52 @@ function disableCartControls() {
   }
 }
 
+/**
+ * Обновлённа логіка:
+ * Увесь функціонал cart-check.js активується лише,
+ * якщо у кошику явно присутній акційний товар: MSG.PRODUCT_TITLE.
+ */
+function isBoxProductInCart() {
+  return Array.from(document.querySelectorAll('.ec-cart-item__title'))
+    .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE);
+}
+
+
 // == Подключение ==
 waitEcwid(() => {
   Ecwid.OnAPILoaded.add(() => {
+
     Ecwid.OnCartChanged.add(() => {
       setTimeout(() => {
+        if (!isBoxProductInCart()) return;
+
         updateQuantityText();
         validateCartItems();
         checkExtraItems();
         disableCartControls();
-        initControlInterceptors(); // 👈 сюда (15-05-205)
-        addDomNoticeForBlockedOptions(); // 👈 добавляем визуальную подсказку (16-05-205)
-        disableCouponPlaceholderText(); // ⬅️ добавлено (16-05-205)
-        console.log(JSON.stringify(cart));
+        initControlInterceptors();
+        addDomNoticeForBlockedOptions();
+        disableCouponPlaceholderText();
       }, 300);
     });
 
     Ecwid.OnPageLoaded.add(page => {
       if (page.type === "CART") {
         setTimeout(() => {
+          if (!isBoxProductInCart()) return;
+
           updateQuantityText();
           validateCartItems();
           checkExtraItems();
           disableCartControls();
-          initControlInterceptors(); // 👈 сюда (15-05-205)
-          addDomNoticeForBlockedOptions(); // 👈 добавляем визуальную подсказку (16-05-205)
-          disableCouponPlaceholderText(); // ⬅️ добавлено (16-05-205)
-          console.log(JSON.stringify(cart));
+          initControlInterceptors();
+          addDomNoticeForBlockedOptions();
+          disableCouponPlaceholderText();
         }, 500);
       }
     });
+
   });
 });
+
 
