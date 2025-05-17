@@ -1,26 +1,239 @@
 // == Константы ==
-var QVM = {
-  validate: function (v) {
-    "use asm";
-    v = v | 0;
-    return (v === 15) | 0;
+const MSG = {
+  cart: {
+    ALERT: 'Загальна кількість банок у ящику має бути 15. Будь ласка, змініть вміст.\n\nУмови:\n• Класичний Полісол — до 7 банок\n• Інші види (Ш, Ж, М, Ч) — мінімум 8 банок',
+    LINK_TEXT: 'Натисніть тут, щоб змінити вміст ящика',
+    PRODUCT_URL: '/Yaschik-ekstrakta-polisolodovogo-550g-15banok-p717719689',
+    PRODUCT_TITLE: 'Ящик екстракту полісолодового (15бан./550г) в асортименті:',
+    BOX_TEXT: '&nbsp;ящиків',
+    ALERT_EXTRA_ITEMS: 'Це спеціальний кошик для акційного товару. Він діє лише для:\n"Ящик екстракту полісолодового (15бан./550г) в асортименті"\n\nОднак наразі у кошику є інші товари. Це порушує умови акції — будь ласка:\n✔ Видаліть зайві позиції або ✔ Оформіть їх окремим замовленням',
+    LINK_TEXT_REMOVE: '❌ Видалити товар з кошика',
+    DISABLED_CONTROL_HINT: 'Ця дія тимчасово недоступна при замовленні акційного товару.'
+  },
+  bulk: {
+    PRODUCT_TITLE: 'Полісол™ (опт)',
+    PRODUCT_URL: '/Polisol-tm-opt-p747565531',
+    INVALID_NOTICE: '⚠️ Помилка формування партії:\n• Усі позиції повинні мати однакову кількість банок (наприклад, "30 банок")\n• Сума банок повинна дорівнювати обсягу партії\n• У кошику не повинно бути сторонніх товарів\n✔ Додайте необхідні варіації або видаліть зайві товари',
+    CONTROL_HINT: 'Ця дія недоступна під час оформлення партії Полісол™ (опт)'
+  },
+  shared: {
+    MIXED_WARNING: '⚠️ У кошику не можна одночасно мати два акційні товари:\n• “Ящик екстракту...” та “Полісол™ (опт)”\nВидаліть один з них, щоб продовжити оформлення.'
   }
 };
 
-var MSG = {
-  ALERT: 'Загальна кількість банок у ящику має бути 15. Будь ласка, змініть вміст.\n\nУмови:\n• Класичний Полісол — до 7 банок\n• Інші види (Ш, Ж, М, Ч) — мінімум 8 банок',
-  LINK_TEXT: 'Натисніть тут, щоб змінити вміст ящика',
-  PRODUCT_URL: '/Yaschik-ekstrakta-polisolodovogo-550g-15banok-p717719689',
-  PRODUCT_TITLE: 'Ящик екстракту полісолодового (15бан./550г) в асортименті:',
-  BOX_TEXT: '&nbsp;ящиків',
-  ALERT_EXTRA_ITEMS: 'Це спеціальний кошик для акційного товару. Він діє лише для:\n"Ящик екстракту полісолодового (15бан./550г) в асортименті"\n\nОднак наразі у кошику є інші товари. Це порушує умови акції — будь ласка:\n✔ Видаліть зайві позиції або ✔ Оформіть їх окремим замовленням',
-  LINK_TEXT_REMOVE: '❌ Видалити товар з кошика',
-  DISABLED_CONTROL_HINT: 'Ця дія тимчасово недоступна при замовленні акційного товару.'
+let lastAlertTime = 0;
+
+// == Детектор ==
+function detectTrigger() {
+  const titles = Array.from(document.querySelectorAll('.ec-cart-item__title')).map(e => e.textContent.trim());
+  const first = titles[0];
+  return {
+    isMixed: titles.includes(MSG.cart.PRODUCT_TITLE) && titles.includes(MSG.bulk.PRODUCT_TITLE),
+    trigger: first === MSG.cart.PRODUCT_TITLE ? 'cart' : (first === MSG.bulk.PRODUCT_TITLE ? 'bulk' : null)
+  };
+}
+
+// == CART Namespace ==
+const CART = {
+  QVM: {
+    validate: v => { "use asm"; v = v | 0; return (v === 15) | 0; }
+  },
+  updateQuantityText() {
+    const hasBox = Array.from(document.querySelectorAll('.ec-cart-item__title')).some(el => el.textContent.trim() === MSG.cart.PRODUCT_TITLE);
+    if (!hasBox) return;
+    document.querySelectorAll('.form-control__select-text').forEach(el => {
+      if (el.textContent.includes(':') && !el.textContent.includes('ящиків')) {
+        el.innerHTML = el.textContent.replace(':', `${MSG.cart.BOX_TEXT}:`);
+      }
+    });
+  },
+  validateItems() {
+    let total = 0;
+    let found = false;
+    let shouldAlert = false;
+    const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
+    items.forEach(item => {
+      const title = item.querySelector('.ec-cart-item__title')?.textContent.trim();
+      if (title === MSG.cart.PRODUCT_TITLE) {
+        found = true;
+        item.querySelectorAll('.ec-cart-option--value').forEach(option => {
+          const num = parseInt(option.textContent.match(/\d+/)?.[0], 10);
+          total += isNaN(num) ? 0 : num;
+        });
+        const checkbox = document.getElementById('form-control__checkbox--agree');
+        const valid = CART.QVM.validate(total | 0);
+        if (checkbox) checkbox.disabled = !valid;
+        if (!valid) {
+          shouldAlert = true;
+          const optionsDiv = item.querySelector('.ec-cart-item__options.ec-text-muted');
+          if (optionsDiv && !optionsDiv.nextElementSibling?.classList?.contains('ec-form__title')) {
+            const div = document.createElement('div');
+            div.className = 'ec-form__title ec-header-h6';
+            div.innerHTML = `
+              <div class="marker-required marker-required--medium marker-required--active"></div>
+              <a href="${MSG.cart.PRODUCT_URL}" style="color: red; font-weight: bold;">${MSG.cart.LINK_TEXT}</a>`;
+            div.querySelector('a').addEventListener('click', e => {
+              e.preventDefault(); Ecwid.Cart.clear();
+              setTimeout(() => location.href = e.target.href, 200);
+            });
+            optionsDiv.parentNode.insertBefore(div, optionsDiv.nextSibling);
+          }
+        } else {
+          const warning = item.querySelector('.ec-cart-item__options.ec-text-muted + .ec-form__title');
+          if (warning) warning.remove();
+        }
+      }
+    });
+    if (shouldAlert && Date.now() - lastAlertTime > 5000) {
+      alert(MSG.cart.ALERT); lastAlertTime = Date.now();
+    }
+    if (!found) {
+      document.querySelectorAll('.ec-form__title.ec-header-h6').forEach(el => {
+        if (el.querySelector('a')?.textContent === MSG.cart.LINK_TEXT) el.remove();
+      });
+    }
+  },
+  checkExtraItems() {
+    const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
+    const extra = Array.from(items).filter(el => {
+      const title = el.querySelector('.ec-cart-item__title')?.textContent.trim();
+      return title && title !== MSG.cart.PRODUCT_TITLE;
+    });
+    const checkbox = document.getElementById('form-control__checkbox--agree');
+    if (checkbox) checkbox.disabled = extra.length > 0;
+    extra.forEach(item => {
+      if (!item.querySelector('.ec-remove-link-marker')) {
+        const div = document.createElement('div');
+        div.className = 'ec-form__title ec-header-h6 ec-remove-link-marker';
+        div.innerHTML = `<div class="marker-required marker-required--medium marker-required--active"></div>
+        <a href="#" style="color: red; font-weight: bold;">${MSG.cart.LINK_TEXT_REMOVE}</a>`;
+        div.querySelector('a').addEventListener('click', e => {
+          e.preventDefault();
+          item.querySelector('.ec-cart-item__control-inner')?.click();
+        });
+        item.appendChild(div);
+      }
+      const wrap = item.closest('.ec-cart-item__wrap');
+      const sel = wrap?.querySelector('.form-control__select-text');
+      if (sel && sel.textContent.includes('ящиків')) {
+        sel.innerHTML = sel.innerHTML.replace('ящиків', '').replace(/\s+:/, ':');
+      }
+    });
+    if (extra.length > 0 && Date.now() - lastAlertTime > 5000) {
+      alert(MSG.cart.ALERT_EXTRA_ITEMS);
+      lastAlertTime = Date.now();
+    }
+  },
+  disableControls() {
+    ['.ec-cart__coupon', '.ec-cart__shopping'].forEach(selector => {
+      const block = document.querySelector(selector);
+      const link = block?.querySelector('a');
+      if (block) {
+        block.style.pointerEvents = 'none';
+        block.style.opacity = '0.5';
+      }
+      if (link) {
+        link.style.cursor = 'not-allowed';
+        link.addEventListener('click', e => {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return false;
+        });
+      }
+    });
+  },
+  patchPlaceholder() {
+    const placeholder = document.querySelector('.ec-cart__coupon .form-control__placeholder-inner');
+    if (placeholder && !placeholder.dataset.modified) {
+      placeholder.textContent = '🔕 Тут код не діє';
+      placeholder.dataset.modified = 'true';
+    }
+  }
 };
 
-var lastAlertTime = 0;
+// == BULK Namespace ==
+const BULK = {
+  updateQuantityText() {
+    document.querySelectorAll('.form-control__select-text').forEach(el => {
+      if (el.textContent.includes(':') && !el.textContent.includes('банок')) {
+        el.innerHTML = el.textContent.replace(':', 'банок:');
+      }
+    });
+  },
+  getJarCount(item) {
+    const countText = item.closest('.ec-cart-item__wrap')?.querySelector('.form-control__select-text')?.textContent;
+    return parseInt(countText?.match(/\d+/)?.[0], 10) || 0;
+  },
+  getBulkSize(item) {
+    const match = item.querySelector('.ec-cart-option--value')?.textContent?.match(/(\d+)\s*банок/);
+    return match ? parseInt(match[1], 10) : 0;
+  },
+  validate() {
+    const items = Array.from(document.querySelectorAll('.ec-cart-item__wrap-primary'))
+      .filter(i => i.querySelector('.ec-cart-item__title')?.textContent.trim() === MSG.bulk.PRODUCT_TITLE);
+    if (!items.length) return;
 
-// == Функции ==
+    const sizes = items.map(BULK.getBulkSize);
+    const same = sizes.every(s => s === sizes[0]);
+    const sum = items.reduce((acc, i) => acc + BULK.getJarCount(i), 0);
+    const valid = same && sum === sizes[0];
+
+    const extraItems = Array.from(document.querySelectorAll('.ec-cart-item__title'))
+      .some(t => t.textContent.trim() !== MSG.bulk.PRODUCT_TITLE);
+
+    const checkbox = document.getElementById('form-control__checkbox--agree');
+    if (checkbox) checkbox.disabled = !valid || extraItems;
+
+    const existing = document.getElementById('bulk-validation-notice');
+    if (existing) existing.remove();
+
+    if (!valid || extraItems) {
+      const notice = document.createElement('div');
+      notice.id = 'bulk-validation-notice';
+      notice.style.color = 'red';
+      notice.style.margin = '12px 0';
+      notice.style.fontSize = '14px';
+      notice.innerHTML = `
+        ⚠️ Формування партії некоректне:<br>
+        ${!same ? '• Усі позиції мають містити однакову кількість банок<br>' : ''}
+        ${(sum !== sizes[0]) ? `• Загальна кількість банок: ${sum}, очікується: ${sizes[0]}<br>` : ''}
+        ${extraItems ? '• У кошику є зайві товари<br>' : ''}
+        <a href="${MSG.bulk.PRODUCT_URL}" style="color: blue;">➕ Додати інгредієнт</a>
+      `;
+      document.querySelector('.ec-cart__products-inner')?.appendChild(notice);
+    }
+  }
+};
+
+// == MAIN ROUTER ==
+function runLogic() {
+  const { isMixed, trigger } = detectTrigger();
+  if (isMixed) {
+    const notice = document.createElement('div');
+    notice.id = 'mixed-trigger-warning';
+    notice.style.color = 'darkred';
+    notice.style.margin = '12px 0';
+    notice.style.fontWeight = 'bold';
+    notice.textContent = MSG.shared.MIXED_WARNING;
+    document.querySelector('.ec-cart__products-inner')?.appendChild(notice);
+    const checkbox = document.getElementById('form-control__checkbox--agree');
+    if (checkbox) checkbox.disabled = true;
+    return;
+  }
+
+  if (trigger === 'cart') {
+    CART.updateQuantityText();
+    CART.validateItems();
+    CART.checkExtraItems();
+    CART.disableControls();
+    CART.patchPlaceholder();
+  } else if (trigger === 'bulk') {
+    BULK.updateQuantityText();
+    BULK.validate();
+  }
+}
+
+// == Ecwid Init ==
 function waitEcwid(callback) {
   if (typeof Ecwid !== 'undefined' && typeof Ecwid.OnAPILoaded !== 'undefined') {
     callback();
@@ -29,330 +242,12 @@ function waitEcwid(callback) {
   }
 }
 
-window.addEventListener('beforeunload', () => {
-  document.querySelectorAll('.custom-disabled-tooltip').forEach(t => t.remove());
-});
-
-function updateQuantityText() {
-  const hasBoxProduct = Array.from(document.querySelectorAll('.ec-cart-item__title'))
-    .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE);
-
-  if (!hasBoxProduct) return;
-
-  document.querySelectorAll('.form-control__select-text').forEach(el => {
-    if (el.textContent.includes(':') && !el.textContent.includes('ящиків')) {
-      el.innerHTML = el.textContent.replace(':', `${MSG.BOX_TEXT}:`);
-    }
-  });
-}
-
-function disableCouponPlaceholderText() {
-  const placeholder = document.querySelector('.ec-cart__coupon .form-control__placeholder-inner');
-
-  if (placeholder && !placeholder.dataset.modified) {
-    placeholder.textContent = '🔕 Тут код не діє';
-    placeholder.dataset.modified = 'true'; // предотвратим повторную подмену
-  }
-}
-
-
-function addDomNoticeForBlockedOptions() {
-  const couponBlock = document.querySelector('.ec-cart__coupon.ec-cart-coupon');
-  const shoppingBlock = document.querySelector('.ec-cart__shopping.ec-cart-shopping');
-  const localizedMessage = '🔕 Ці опції тимчасово недоступні — кошик вже містить акційний товар.';
-
-  // Добавить префикс к заголовкам
-  const titleSpans = document.querySelectorAll('.ec-cart__coupon .ec-cart__title, .ec-cart__shopping .ec-cart__title');
-  titleSpans.forEach(title => {
-    if (!title.dataset.modified) {
-      title.textContent = `🔕 ${title.textContent}`;
-      title.dataset.modified = 'true';
-    }
-  });
-
-  // Вставить пояснение после shoppingBlock (если еще не вставлено)
-  if (shoppingBlock && !document.querySelector('.ec-disabled-options-note')) {
-    const note = document.createElement('div');
-    note.className = 'ec-disabled-options-note';
-    note.textContent = localizedMessage;
-    note.style.fontSize = '13px';
-    note.style.color = '#888';
-    note.style.marginTop = '8px';
-    note.style.marginBottom = '12px';
-    shoppingBlock.parentNode.insertBefore(note, shoppingBlock.nextSibling);
-  }
-}
-
-
-function initControlInterceptors() {
-  const message = MSG.DISABLED_CONTROL_HINT;
-
-  const tryIntercept = () => {
-    ['.ec-cart__coupon a', '.ec-cart__shopping a'].forEach(selector => {
-      const link = document.querySelector(selector);
-      if (link && !link.dataset.blocked) {
-        link.dataset.blocked = 'true';
-        link.style.cursor = 'not-allowed';
-
-        // Самое важное: удаляем href, если можно
-        link.setAttribute('href', 'javascript:void(0)');
-        link.removeAttribute('onclick');
-
-        // Tooltip
-        link.addEventListener('mouseenter', () => showCustomTooltip(link, message));
-        link.addEventListener('mouseleave', () => hideCustomTooltip(link));
-
-        // На всякий случай — полный запрет действий
-        link.addEventListener('click', function (e) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          return false;
-        });
-      }
-    });
-  };
-
-  // Первый запуск
-  tryIntercept();
-
-  // Следим за DOM (Ecwid может перерендерить корзину)
-  const observer = new MutationObserver(() => tryIntercept());
-  observer.observe(document.body, { childList: true, subtree: true });
-}
-
-
-
-function showCustomTooltip(target, message) {
-  return; // 🔕 временно отключено
-  const tooltip = document.createElement('div');
-  tooltip.className = 'custom-disabled-tooltip';
-  tooltip.textContent = message;
-  tooltip.style.position = 'absolute';
-  tooltip.style.background = '#333';
-  tooltip.style.color = '#fff';
-  tooltip.style.padding = '6px 10px';
-  tooltip.style.borderRadius = '4px';
-  tooltip.style.fontSize = '13px';
-  tooltip.style.whiteSpace = 'nowrap';
-  tooltip.style.zIndex = '9999';
-  tooltip.style.top = `${target.getBoundingClientRect().top + window.scrollY - 35}px`;
-  tooltip.style.left = `${target.getBoundingClientRect().left + window.scrollX}px`;
-  tooltip.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
-  tooltip.style.pointerEvents = 'none';
-  document.body.appendChild(tooltip);
-  target._tooltip = tooltip;
-}
-
-function hideCustomTooltip(target) {
-  if (target._tooltip) {
-    document.body.removeChild(target._tooltip);
-    delete target._tooltip;
-  }
-}
-
-function validateCartItems() {
-  let total = 0;
-  const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
-  let productFound = false;
-  let shouldShowAlert = false;
-
-  items.forEach(item => {
-    const title = item.querySelector('.ec-cart-item__title');
-    if (title && title.textContent.trim() === MSG.PRODUCT_TITLE) {
-      productFound = true;
-      item.querySelectorAll('.ec-cart-option--value').forEach(option => {
-        const value = parseInt(option.textContent.trim().match(/\d+/), 10);
-        total += isNaN(value) ? 0 : value;
-      });
-
-      const checkbox = document.getElementById('form-control__checkbox--agree');
-      const isValid = QVM.validate(total | 0);
-      if (checkbox) checkbox.disabled = !isValid;
-
-      if (!isValid) {
-        shouldShowAlert = true;
-        let optionsDiv = item.querySelector('.ec-cart-item__options.ec-text-muted');
-        if (optionsDiv && !optionsDiv.nextElementSibling?.classList?.contains('ec-form__title')) {
-          const linkDiv = document.createElement('div');
-          linkDiv.className = 'ec-form__title ec-header-h6';
-          linkDiv.innerHTML = `
-            <div class="marker-required marker-required--medium marker-required--active"></div>
-            <a href="${MSG.PRODUCT_URL}" target="_self" style="color: red; font-weight: bold;">
-              ${MSG.LINK_TEXT}
-            </a>
-          `;
-          const link = linkDiv.querySelector('a');
-          link.addEventListener('click', function (e) {
-            e.preventDefault();
-            Ecwid.Cart.clear();
-            setTimeout(() => {
-              window.location.href = this.href;
-            }, 200);
-          });
-          optionsDiv.parentNode.insertBefore(linkDiv, optionsDiv.nextSibling);
-        }
-      } else {
-        const warningDiv = item.querySelector('.ec-cart-item__options.ec-text-muted + .ec-form__title');
-        if (warningDiv) {
-          warningDiv.remove();
-        }
-      }
-    }
-  });
-
-  if (shouldShowAlert && Date.now() - lastAlertTime > 5000) {
-    alert(MSG.ALERT);
-    lastAlertTime = Date.now();
-  }
-
-  if (!productFound) {
-    document.querySelectorAll('.ec-form__title.ec-header-h6').forEach(el => {
-      if (el.querySelector('a')?.textContent === MSG.LINK_TEXT) {
-        el.remove();
-      }
-    });
-  }
-}
-
-function checkExtraItems() {
-  const items = document.querySelectorAll('.ec-cart-item__wrap-primary');
-  const itemTitles = Array.from(items).map(el => el.querySelector('.ec-cart-item__title')?.textContent.trim());
-  const hasBoxProduct = itemTitles.includes(MSG.PRODUCT_TITLE);
-
-  if (!hasBoxProduct) return;
-
-  const extraItems = Array.from(items).filter(el => {
-    const title = el.querySelector('.ec-cart-item__title')?.textContent.trim();
-    return title && title !== MSG.PRODUCT_TITLE;
-  });
-
-  const checkbox = document.getElementById('form-control__checkbox--agree');
-  if (checkbox) {
-    checkbox.disabled = extraItems.length > 0;
-  }
-
-  extraItems.forEach(item => {
-    if (!item.querySelector('.ec-remove-link-marker')) {
-      const linkDiv = document.createElement('div');
-      linkDiv.className = 'ec-form__title ec-header-h6 ec-remove-link-marker';
-      linkDiv.innerHTML = `
-        <div class="marker-required marker-required--medium marker-required--active"></div>
-        <a href="#" target="_self" style="color: red; font-weight: bold;">
-          ${MSG.LINK_TEXT_REMOVE}
-        </a>
-      `;
-      const removeLink = linkDiv.querySelector('a');
-      removeLink.addEventListener('click', function (e) {
-        e.preventDefault();
-        const removeButton = item.querySelector('.ec-cart-item__control-inner');
-        if (removeButton) removeButton.click();
-      });
-
-      item.appendChild(linkDiv);
-    }
-
-    const wrapContainer = item.closest('.ec-cart-item__wrap');
-    if (wrapContainer) {
-      const selectText = wrapContainer.querySelector('.form-control__select-text');
-      if (selectText && selectText.textContent.includes('ящиків')) {
-        selectText.innerHTML = selectText.innerHTML.replace('ящиків', '').replace(/\s+:/, ':');
-      }
-    }
-  });
-
-  if (extraItems.length > 0 && Date.now() - lastAlertTime > 5000) {
-    alert(MSG.ALERT_EXTRA_ITEMS);
-    lastAlertTime = Date.now();
-  }
-}
-
-function disableCartControls() {
-  const couponBlock = document.querySelector('.ec-cart__coupon.ec-cart-coupon');
-  const shoppingBlock = document.querySelector('.ec-cart__shopping.ec-cart-shopping');
-  const message = MSG.DISABLED_CONTROL_HINT;
-
-  function setupLinkTooltip(block) {
-    const link = block?.querySelector('a');
-    if (link) {
-      link.style.pointerEvents = 'auto';
-      link.style.cursor = 'not-allowed';
-
-      // Удаляем старый обработчик (если был)
-      link.removeEventListener('click', link._preventClickHandler);
-
-      // Блокируем клик
-      const preventClickHandler = function (e) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return false;
-      };
-
-      link.addEventListener('click', preventClickHandler);
-      link._preventClickHandler = preventClickHandler;
-
-      link.addEventListener('mouseenter', () => showCustomTooltip(link, message));
-      link.addEventListener('mouseleave', () => hideCustomTooltip(link));
-    }
-  }
-
-  if (couponBlock) {
-    couponBlock.style.pointerEvents = 'none';
-    couponBlock.style.opacity = '0.5';
-    setupLinkTooltip(couponBlock);
-  }
-
-  if (shoppingBlock) {
-    shoppingBlock.style.pointerEvents = 'none';
-    shoppingBlock.style.opacity = '0.5';
-    setupLinkTooltip(shoppingBlock);
-  }
-}
-
-/**
- * Обновлённа логіка:
- * Увесь функціонал cart-check.js активується лише,
- * якщо у кошику явно присутній акційний товар: MSG.PRODUCT_TITLE.
- */
-function isBoxProductInCart() {
-  return Array.from(document.querySelectorAll('.ec-cart-item__title'))
-    .some(el => el.textContent.trim() === MSG.PRODUCT_TITLE);
-}
-
-
-// == Подключение ==
 waitEcwid(() => {
   Ecwid.OnAPILoaded.add(() => {
-
-    Ecwid.OnCartChanged.add(() => {
-      setTimeout(() => {
-        if (!isBoxProductInCart()) return;
-
-        updateQuantityText();
-        validateCartItems();
-        checkExtraItems();
-        disableCartControls();
-        initControlInterceptors();
-        addDomNoticeForBlockedOptions();
-        disableCouponPlaceholderText();
-      }, 300);
-    });
-
+    Ecwid.OnCartChanged.add(() => setTimeout(runLogic, 300));
     Ecwid.OnPageLoaded.add(page => {
-      if (page.type === "CART") {
-        setTimeout(() => {
-          if (!isBoxProductInCart()) return;
-
-          updateQuantityText();
-          validateCartItems();
-          checkExtraItems();
-          disableCartControls();
-          initControlInterceptors();
-          addDomNoticeForBlockedOptions();
-          disableCouponPlaceholderText();
-        }, 500);
-      }
+      if (page.type === 'CART') setTimeout(runLogic, 500);
     });
-
   });
 });
 
