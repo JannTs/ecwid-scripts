@@ -156,7 +156,7 @@ const BULK = {
   updateQuantityText() {
     document.querySelectorAll('.form-control__select-text').forEach(el => {
       if (el.textContent.includes(':') && !el.textContent.includes('банок')) {
-        el.innerHTML = el.textContent.replace(':', 'банок:');
+        el.innerHTML = el.textContent.replace(':', '&nbsp;банок:');
       }
     });
   },
