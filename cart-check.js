@@ -1,3 +1,8 @@
+function resolveProductUrl(productId, fallbackSlug) {
+  return location.pathname.includes('/product') || location.search.includes('product=')
+    ? `/?product=${productId}`
+    : fallbackSlug;
+}
 // == Константы ==
 const MSG = {
   cart: {
@@ -12,7 +17,7 @@ const MSG = {
   },
   bulk: {
     PRODUCT_TITLE: 'Полісол™ (опт)',
-    PRODUCT_URL: '/Polisol-tm-opt-p747565531',
+    PRODUCT_URL: resolveProductUrl('747565531', '/Polisol-tm-opt-p747565531'),
     INVALID_NOTICE: '⚠️ Помилка формування партії:\n• Оптова ціна визначається єдиним розміром партії, встановленим для кожного виду Полісолу з асортименту в кошику. Видаліть небажані позиції, що не відповідають цій вимозі.\n•Сума банок різних видів Полісолу повинна дорівнювати обсягу партії\n• У кошику не повинно бути сторонніх товарів\n✔ Додайте необхідні варіації або видаліть зайві товари',
     CONTROL_HINT: 'Ця дія недоступна під час оформлення партії Полісол™ (опт)'
   },
