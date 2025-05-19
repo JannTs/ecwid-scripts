@@ -36,16 +36,22 @@ const MSG = {
 let lastAlertTime = 0;
 
 function injectBulkMarkers() {
-  const values = document.querySelectorAll('.ec-cart-option--value');
-  values.forEach(el => {
-    const parent = el.parentElement;
-    if (!parent.querySelector('.marker-required.marker-required--small')) {
+  const optionPairs = document.querySelectorAll('.ec-cart-item__option');
+  optionPairs.forEach(pair => {
+    const key = pair.querySelector('.ec-cart-option--key')?.textContent.toLowerCase() || '';
+    const value = pair.querySelector('.ec-cart-option--value');
+
+    const isBulkSizeOption =
+      key.includes('розмір партії') || (value && value.textContent.includes('='));
+
+    if (isBulkSizeOption && value && !value.querySelector('.marker-required--small')) {
       const marker = document.createElement('div');
       marker.className = 'marker-required marker-required--small';
-      parent.appendChild(marker);
+      value.appendChild(marker);
     }
   });
 }
+
 
 function activateBulkMarkers(active = true) {
   const markers = document.querySelectorAll('.marker-required--small');
