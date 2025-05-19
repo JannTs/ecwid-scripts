@@ -35,6 +35,30 @@ const MSG = {
 
 let lastAlertTime = 0;
 
+function injectBulkMarkers() {
+  const values = document.querySelectorAll('.ec-cart-option--value');
+  values.forEach(el => {
+    const parent = el.parentElement;
+    if (!parent.querySelector('.marker-required.marker-required--large')) {
+      const marker = document.createElement('div');
+      marker.className = 'marker-required marker-required--large';
+      parent.appendChild(marker);
+    }
+  });
+}
+
+function activateBulkMarkers(active = true) {
+  const markers = document.querySelectorAll('.marker-required--large');
+  markers.forEach(m => {
+    if (active) {
+      m.classList.add('marker-required--active');
+    } else {
+      m.classList.remove('marker-required--active');
+    }
+  });
+}
+
+
 // == Детектор ==
 function detectTrigger() {
   const titles = Array.from(document.querySelectorAll('.ec-cart-item__title')).map(e => e.textContent.trim());
@@ -200,35 +224,45 @@ const BULK = {
     if (existing) existing.remove();
 
     if (!valid || extraItems) {
-      const notice = document.createElement('div');
-      notice.id = 'bulk-validation-notice';
-      notice.style.color = 'red';
-      notice.style.margin = '12px 0';
-      notice.style.fontSize = '14px';
-      notice.innerHTML = `
+  injectBulkMarkers(); // ✅ вставка маркеров
+
+  const notice = document.createElement('div');
+  notice.id = 'bulk-validation-notice';
+  notice.style.color = 'red';
+  notice.style.margin = '12px 0';
+  notice.style.fontSize = '14px';
+
+  notice.innerHTML = `
   ⚠️ <strong>Формування партії наразі некоректне:</strong><br>
-${!same ? `
-  <strong>• Опція «розмір партії» [15, 30, ..., 75 банок]<br>→</strong> діє як модифікатор оптової знижки!<br>
-→ Ця опція має бути <u>однаковою</u> для кожної позиції у кошику <em>(тобто для кожного різновиду товару)</em>.<br>
-Кількість банок для кожного виду товару, <em>яка також визначається замовником</em>, і
- під час формування асортименту може <em>відрізнятись</em>, але їхня загальна кількість має <u>відповідати єдиному «розміру партії»</u>,
- встановленому для всіх товарних позицій у кошику.<br>  
-  <strong>→ Щоб продовжити:</strong><br>
-  <ul style="margin-top: 6px;">
-    <li>Повністю очистіть кошик</li>
-    <li>Створіть асортимент, обравши однаковий «розмір партії» для всіх позицій у кошику.</li>
-  </ul>
-` : ''}
+  ${!same ? `
+    <strong>• Опція <u data-hover="bulk">«розмір партії»</u> [15, 30, ..., 75 банок]<br>→</strong>
+    діє як модифікатор оптової знижки!<br>
+    → Ця опція має бути <u data-hover="bulk">однаковою</u> для кожної позиції у кошику <em>(тобто для кожного різновиду товару)</em>.<br>
+    Кількість банок для кожного виду товару, <em>яка також визначається замовником</em>, і під час формування асортименту може <em>відрізнятись</em>, але їхня загальна кількість має <u data-hover="bulk">відповідати єдиному «розміру партії»</u>, встановленому для всіх товарних позицій у кошику.<br>  
+    <strong>→ Щоб продовжити:</strong><br>
+    <ul style="margin-top: 6px;">
+      <li>Повністю очистіть кошик</li>
+      <li>Створіть асортимент, обравши однаковий «розмір партії» для всіх позицій у кошику.</li>
+    </ul>
+  ` : ''}
   ${(sum !== sizes[0]) ? `• Загальна кількість банок: ${sum}, очікується: ${sizes[0]}<br>` : ''}
   ${extraItems ? '• У кошику є зайві товари<br>' : ''}
   ${
     sum < sizes[0]
       ? `<a href="${MSG.bulk.PRODUCT_URL}" style="color: blue;">➕ Додати ще банок до ${sizes[0]} шт.</a>`
-      : `<div style="color:  blue; margin-top: 6px;">🔻 Зменште кількість до ${sizes[0]} шт.</div>`
+      : `<div style="color: blue; margin-top: 6px;">🔻 Зменште кількість до ${sizes[0]} шт.</div>`
   }
-`;
-      document.querySelector('.ec-cart__products-inner')?.appendChild(notice);
-    }
+  `;
+
+  document.querySelector('.ec-cart__products-inner')?.appendChild(notice);
+
+  // 🔄 Добавляем поведение при наведении на <u data-hover="bulk">
+  document.querySelectorAll('u[data-hover="bulk"]').forEach(el => {
+    el.addEventListener('mouseenter', () => activateBulkMarkers(true));
+    el.addEventListener('mouseleave', () => activateBulkMarkers(false));
+  });
+}
+
   }
 };
 
