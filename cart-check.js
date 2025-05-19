@@ -224,7 +224,7 @@ ${!same ? `
   ${
     sum < sizes[0]
       ? `<a href="${MSG.bulk.PRODUCT_URL}" style="color: blue;">➕ Додати ще банок до ${sizes[0]} шт.</a>`
-      : `<div style="color: #444; margin-top: 6px;">🔻 Зменште кількість до ${sizes[0]} шт.</div>`
+      : `<div style="color:  blue;; margin-top: 6px;">🔻 Зменште кількість до ${sizes[0]} шт.</div>`
   }
 `;
       document.querySelector('.ec-cart__products-inner')?.appendChild(notice);
