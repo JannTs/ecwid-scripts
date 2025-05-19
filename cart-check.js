@@ -39,16 +39,16 @@ function injectBulkMarkers() {
   const values = document.querySelectorAll('.ec-cart-option--value');
   values.forEach(el => {
     const parent = el.parentElement;
-    if (!parent.querySelector('.marker-required.marker-required--large')) {
+    if (!parent.querySelector('.marker-required.marker-required--small')) {
       const marker = document.createElement('div');
-      marker.className = 'marker-required marker-required--large';
+      marker.className = 'marker-required marker-required--small';
       parent.appendChild(marker);
     }
   });
 }
 
 function activateBulkMarkers(active = true) {
-  const markers = document.querySelectorAll('.marker-required--large');
+  const markers = document.querySelectorAll('.marker-required--small');
   markers.forEach(m => {
     if (active) {
       m.classList.add('marker-required--active');
