@@ -1,3 +1,83 @@
+// === 1. Проверка на параметр в URL ===
+function getQueryParam(param) {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.has(param);
+}
+
+let isFromPolisol = getQueryParam('productView'); // fallback
+let isProductShown = false;
+
+// === 2. Приём сообщения от polisol.online ===
+window.addEventListener('message', event => {
+  if (event.origin === 'https://polisol.online' && event.data.source === 'polisol') {
+    isFromPolisol = true;
+    document.body.classList.add('from-polisol-embed');
+  }
+});
+
+// === 3. Ожидание загрузки Ecwid ===
+function waitEcwid(callback) {
+  if (typeof Ecwid !== 'undefined' && typeof Ecwid.OnAPILoaded !== 'undefined') {
+    callback();
+  } else {
+    setTimeout(() => waitEcwid(callback), 100);
+  }
+}
+
+waitEcwid(() => {
+  Ecwid.OnAPILoaded.add(() => {
+
+    // === 4. Логика при загрузке страницы ===
+    Ecwid.OnPageLoaded.add(page => {
+      if (isFromPolisol && !isProductShown && page.type !== 'PRODUCT') {
+        isProductShown = true;
+        Ecwid.openProduct('p671365720');
+      }
+
+      // === 5. Модификации на странице товара ===
+      if (isFromPolisol && page.type === 'PRODUCT' && page.productId === 671365720) {
+        const qtyBlock = document.querySelector('.details-product-purchase__qty');
+        if (qtyBlock) qtyBlock.style.display = 'none';
+
+        const btn = document.querySelector('.form-control.form-control--button .details-product-purchase__button');
+        if (btn) btn.textContent = 'Pay for this';
+      }
+
+      // === 6. Модификация внешнего вида корзины ===
+      if (isFromPolisol && page.type === 'CART') {
+        const style = document.createElement('style');
+        style.textContent = `
+          header, footer, .ec-store__breadcrumbs, .ec-cart__shopping, .ec-cart__coupon {
+            display: none !important;
+          }
+          .form-control__button-inner {
+            font-weight: bold;
+            background: #4caf50;
+            color: white;
+            border-radius: 6px;
+            padding: 10px 20px;
+          }
+          .form-control__button-inner::after {
+            content: " ➔ Продовжити оформлення";
+          }
+        `;
+        document.head.appendChild(style);
+      }
+    });
+
+    // === 7. Клик по кнопке → перейти в корзину ===
+    document.addEventListener('click', e => {
+      if (isFromPolisol) {
+        const btn = e.target.closest('.form-control.form-control--button .details-product-purchase__button');
+        if (btn) {
+          setTimeout(() => Ecwid.openPage('cart'), 300);
+        }
+      }
+    });
+
+  });
+});
+
 function resolveProductUrl(productId, fallbackSlug, fallbackName = '') {
   const baseUrl = location.origin + location.pathname;
   const isEcwidEmbed = /#!/.test(location.href); // обнаруживает hash-based ссылки
@@ -326,5 +406,3 @@ waitEcwid(() => {
     });
   });
 });
-
-
