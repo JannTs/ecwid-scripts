@@ -407,6 +407,7 @@ waitEcwid(() => {
   });
 });
 
+// Ecwid-cart-check-debug.js — версию для отладки
 (function () {
   var TARGET_PRODUCT_ID = null;
 
@@ -420,6 +421,7 @@ waitEcwid(() => {
   }
 
   function hideUnwantedEcwidElements() {
+    console.log('[cart-check.js] Hiding all except #main (filtered)');
     var body = document.body;
     Array.from(body.children).forEach(function (el) {
       if (el.tagName.toLowerCase() !== "script" && el.id !== "main") {
@@ -443,6 +445,7 @@ waitEcwid(() => {
   }
 
   function showAllEcwidElements() {
+    console.log('[cart-check.js] Restoring all elements (filter OFF)');
     var body = document.body;
     Array.from(body.children).forEach(function (el) {
       if (el.tagName.toLowerCase() !== "script" && el.id !== "main") {
@@ -475,6 +478,7 @@ waitEcwid(() => {
   window.addEventListener("message", function(ev) {
     if (typeof ev.data === "object" && ev.data.ecwidCleanProductId !== undefined) {
       TARGET_PRODUCT_ID = String(ev.data.ecwidCleanProductId) || null;
+      console.log(`[cart-check.js] Получено postMessage ecwidCleanProductId:`, TARGET_PRODUCT_ID);
       updateVisibility();
     }
   });
@@ -483,10 +487,15 @@ waitEcwid(() => {
   function waitMainAndTry(retries = 30) {
     if (document.querySelector('#main')) {
       updateVisibility();
+      console.log('[cart-check.js] #main появился, вызов updateVisibility()');
     } else if (retries > 0) {
       setTimeout(() => waitMainAndTry(retries - 1), 200);
     }
   }
   waitMainAndTry();
-})();
 
+  // Отладочная инфа в консоли:
+  try {
+    console.log('[cart-check.js] Скрипт подключён. window.name:', window.name);
+  } catch (e) {}
+})();
