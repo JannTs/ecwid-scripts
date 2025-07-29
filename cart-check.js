@@ -407,9 +407,11 @@ waitEcwid(() => {
   });
 });
 
-// Ecwid-cart-check-debug.js — версию для отладки
+// Ecwid-cart-check-debug-v2.js
+// Попытка "закрепить" фильтр на странице cart, чтобы он не сбрасывался после рендеринга/навигации Ecwid.
 (function () {
   var TARGET_PRODUCT_ID = null;
+  var lastApplied = null;
 
   function cartHasProduct(productId) {
     var cartKey = Object.keys(localStorage).find(k => /^ecwid_cart_/.test(k));
@@ -442,6 +444,7 @@ waitEcwid(() => {
         s.type = "ecwid/hidden-script";
       }
     });
+    lastApplied = "hide";
   }
 
   function showAllEcwidElements() {
@@ -464,6 +467,7 @@ waitEcwid(() => {
       s.style.visibility = "";
       if (s.type === "ecwid/hidden-script") s.type = "text/javascript";
     });
+    lastApplied = "show";
   }
 
   function updateVisibility() {
@@ -474,7 +478,17 @@ waitEcwid(() => {
     }
   }
 
-  // React to postMessage from parent
+  // СТАБИЛИЗАТОР: повторять updateVisibility() после рендеринга корзины
+  function stabilizeFilter(intervalMs) {
+    setInterval(function () {
+      if (TARGET_PRODUCT_ID && cartHasProduct(TARGET_PRODUCT_ID)) {
+        if (lastApplied !== "hide") updateVisibility();
+      } else {
+        if (lastApplied !== "show") updateVisibility();
+      }
+    }, intervalMs);
+  }
+
   window.addEventListener("message", function(ev) {
     if (typeof ev.data === "object" && ev.data.ecwidCleanProductId !== undefined) {
       TARGET_PRODUCT_ID = String(ev.data.ecwidCleanProductId) || null;
@@ -483,7 +497,6 @@ waitEcwid(() => {
     }
   });
 
-  // Try initial check after DOM loaded
   function waitMainAndTry(retries = 30) {
     if (document.querySelector('#main')) {
       updateVisibility();
@@ -494,8 +507,11 @@ waitEcwid(() => {
   }
   waitMainAndTry();
 
-  // Отладочная инфа в консоли:
   try {
     console.log('[cart-check.js] Скрипт подключён. window.name:', window.name);
   } catch (e) {}
+
+  // Стартуем стабилизатор (каждые 500ms)
+  stabilizeFilter(500);
 })();
+
