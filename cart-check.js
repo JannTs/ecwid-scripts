@@ -406,3 +406,87 @@ waitEcwid(() => {
     });
   });
 });
+
+(function () {
+  var TARGET_PRODUCT_ID = null;
+
+  function cartHasProduct(productId) {
+    var cartKey = Object.keys(localStorage).find(k => /^ecwid_cart_/.test(k));
+    if (!cartKey) return false;
+    try {
+      var cart = JSON.parse(localStorage[cartKey]);
+      return Array.isArray(cart.items) && cart.items.some(i => String(i.productId) === String(productId));
+    } catch (e) { return false; }
+  }
+
+  function hideUnwantedEcwidElements() {
+    var body = document.body;
+    Array.from(body.children).forEach(function (el) {
+      if (el.tagName.toLowerCase() !== "script" && el.id !== "main") {
+        el.style.visibility = "hidden";
+        el.style.pointerEvents = "none";
+        el.style.height = "0";
+        el.style.margin = "0";
+        el.style.padding = "0";
+        el.style.border = "none";
+        el.style.minHeight = "0";
+        el.style.maxHeight = "0";
+        el.style.overflow = "hidden";
+      }
+    });
+    Array.from(body.querySelectorAll("script")).forEach(function (s) {
+      if (!/var hasStaticHtml/.test(s.textContent) && !/var isHomePage/.test(s.textContent)) {
+        s.style.visibility = "hidden";
+        s.type = "ecwid/hidden-script";
+      }
+    });
+  }
+
+  function showAllEcwidElements() {
+    var body = document.body;
+    Array.from(body.children).forEach(function (el) {
+      if (el.tagName.toLowerCase() !== "script" && el.id !== "main") {
+        el.style.visibility = "";
+        el.style.pointerEvents = "";
+        el.style.height = "";
+        el.style.margin = "";
+        el.style.padding = "";
+        el.style.border = "";
+        el.style.minHeight = "";
+        el.style.maxHeight = "";
+        el.style.overflow = "";
+      }
+    });
+    Array.from(body.querySelectorAll("script")).forEach(function (s) {
+      s.style.visibility = "";
+      if (s.type === "ecwid/hidden-script") s.type = "text/javascript";
+    });
+  }
+
+  function updateVisibility() {
+    if (TARGET_PRODUCT_ID && cartHasProduct(TARGET_PRODUCT_ID)) {
+      hideUnwantedEcwidElements();
+    } else {
+      showAllEcwidElements();
+    }
+  }
+
+  // React to postMessage from parent
+  window.addEventListener("message", function(ev) {
+    if (typeof ev.data === "object" && ev.data.ecwidCleanProductId !== undefined) {
+      TARGET_PRODUCT_ID = String(ev.data.ecwidCleanProductId) || null;
+      updateVisibility();
+    }
+  });
+
+  // Try initial check after DOM loaded
+  function waitMainAndTry(retries = 30) {
+    if (document.querySelector('#main')) {
+      updateVisibility();
+    } else if (retries > 0) {
+      setTimeout(() => waitMainAndTry(retries - 1), 200);
+    }
+  }
+  waitMainAndTry();
+})();
+
