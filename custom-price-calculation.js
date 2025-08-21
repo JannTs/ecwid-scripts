@@ -1,4 +1,3 @@
-// == Custom Dynamic Pricing for Ecwid Product with Debug Logs ==
 function waitEcwid(callback) {
   if (typeof Ecwid !== 'undefined' && typeof Ecwid.OnAPILoaded !== 'undefined') {
     callback();
@@ -12,49 +11,41 @@ waitEcwid(() => {
     Ecwid.OnPageLoaded.add(page => {
       if (page.type === 'PRODUCT') {
         console.log('[DEBUG] Product page loaded. Initializing custom pricing...');
-        initCustomPricing(page);
+        initCustomPricing();
       }
     });
   });
 });
 
-function initCustomPricing(page) {
-  const ec = Ecwid;
-  const productId = page.productId;
-
+function initCustomPricing() {
   const FIXED_WIDTH_MM = 1210;
   const BASE_PRICE_PER_SQM = 22;
 
   function getEnteredLength() {
-    let value =
-      ec.getProductOptionValue(productId, 'Длина в мм') ||
-      ec.getProductOptionValue(productId, 'Length in mm');
-
-    if (!value) {
-      console.warn('[DEBUG] Длина не введена');
+    const input = document.querySelector('input[name*="Длина в мм"], input[name*="Length in mm"]');
+    if (!input) {
+      console.warn('[DEBUG] Длина: поле не найдено');
       return 0;
     }
-
-    value = parseFloat(value);
+    const value = parseFloat(input.value);
     const valid = value >= 1000 && value <= 12000;
-
     console.log('[DEBUG] Parsed length:', value, '| Valid:', valid);
     return valid ? value : 0;
   }
 
   function getSelectedThicknessSurcharge() {
-    let selectedOption =
-      ec.getSelectedOption(productId, 'Толщина') ||
-      ec.getSelectedOption(productId, 'Thickness');
-
-    if (selectedOption && selectedOption.surcharge) {
-      const surcharge = parseFloat(selectedOption.surcharge);
-      console.log('[DEBUG] Surcharge from thickness:', surcharge);
-      return surcharge;
+    const select = document.querySelector('select[name*="Толщина"], select[name*="Thickness"]');
+    if (!select) {
+      console.warn('[DEBUG] Толщина: поле не найдено');
+      return 0;
     }
 
-    console.log('[DEBUG] No surcharge (0)');
-    return 0;
+    const selectedOption = select.options[select.selectedIndex];
+    const surchargeText = selectedOption.textContent.match(/\+?([0-9.,]+)/);
+    const surcharge = surchargeText ? parseFloat(surchargeText[1].replace(',', '.')) : 0;
+
+    console.log('[DEBUG] Толщина выбрана:', selectedOption.textContent, '| Наценка:', surcharge);
+    return surcharge;
   }
 
   function calculatePrice() {
@@ -64,7 +55,7 @@ function initCustomPricing(page) {
     const thicknessSurcharge = getSelectedThicknessSurcharge();
 
     if (lengthMm === 0) {
-      ec.setProductPrice(productId, 1);
+      Ecwid.setProductPrice(1);
       renderPriceInfo(null);
       console.warn('[DEBUG] Invalid or missing length. Price reset to 1.');
       return;
@@ -77,10 +68,8 @@ function initCustomPricing(page) {
     const surcharge = +(areaSqM * thicknessSurcharge).toFixed(2);
     const finalPrice = +(basePrice + surcharge).toFixed(2);
 
-    ec.setProductPrice(productId, finalPrice);
-
-    console.log(`[DEBUG] Width: ${widthM}m, Length: ${lengthM}m, Area: ${areaSqM}m²`);
-    console.log(`[DEBUG] Base: ${basePrice}€, Surcharge: ${surcharge}€, Final: ${finalPrice}€`);
+    Ecwid.setProductPrice(finalPrice);
+    console.log(`[DEBUG] Final Price Set: ${finalPrice}€`);
 
     renderPriceInfo({
       widthM,
@@ -94,7 +83,6 @@ function initCustomPricing(page) {
 
   function renderPriceInfo(data) {
     let infoElement = document.getElementById('custom-price-calculation');
-
     if (!infoElement) {
       infoElement = document.createElement('div');
       infoElement.id = 'custom-price-calculation';
@@ -109,7 +97,7 @@ function initCustomPricing(page) {
     }
 
     if (!data) {
-      infoElement.innerHTML = '<span style="color: red;">Пожалуйста, введите корректную длину от 1000 до 12000 мм.</span>';
+      infoElement.innerHTML = '<span style="color: red;">Введите корректную длину от 1000 до 12000 мм</span>';
       return;
     }
 
@@ -123,22 +111,33 @@ function initCustomPricing(page) {
     `;
   }
 
-  // Проверяем наличие слушателя изменений опций
-  if (ec.OnOptionChanged && typeof ec.OnOptionChanged.add === 'function') {
-    ec.OnOptionChanged.add(option => {
-      console.log('[DEBUG] Option changed:', option.optionName);
-      if (['Длина в мм', 'Length in mm', 'Толщина', 'Thickness'].includes(option.optionName)) {
-        calculatePrice();
-      }
-    });
-  } else {
-    console.warn('[DEBUG] Ecwid.OnOptionChanged не доступен.');
-  }
+  // Подключаем слушателей
+  document.addEventListener('change', e => {
+    if (
+      e.target.name?.includes('Толщина') ||
+      e.target.name?.includes('Thickness') ||
+      e.target.name?.includes('Длина') ||
+      e.target.name?.includes('Length')
+    ) {
+      console.log('[DEBUG] Изменение поля:', e.target.name);
+      calculatePrice();
+    }
+  });
 
-  // Запускаем расчет после загрузки
+  document.addEventListener('input', e => {
+    if (
+      e.target.name?.includes('Длина') ||
+      e.target.name?.includes('Length')
+    ) {
+      console.log('[DEBUG] Ввод длины:', e.target.value);
+      calculatePrice();
+    }
+  });
+
+  // Первый запуск
   setTimeout(() => {
     console.log('[DEBUG] Initial price calculation triggered');
     calculatePrice();
-  }, 500);
+  }, 600);
 }
 
