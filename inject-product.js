@@ -11,27 +11,41 @@
         const sku = getSku();
         if (!sku || !/^WIDTH-1210\b/i.test(sku)) return;     // показываем только для нужного SKU
         injectButton();
-        wireAutoAdd();                                       // автодобавление после создания одноразового товара
+        wireAutoAdd();                                       // Automatically add after a single-use product is created
       });
     });
   });
 
   // --- helpers ---
   function getSku(){
-    const sels = [
-      '[data-product-sku]', '.product-details__sku', '.details-product-code__value',
-      '.ec-store__product-sku', '.ecwid-productBrowser-sku'
-    ];
-    for (const s of sels){
-      const el = document.querySelector(s);
-      if (!el) continue;
-      const raw = (el.getAttribute('data-product-sku') || el.textContent || '').trim();
-      if (!raw) continue;
-      const m = raw.match(/[A-Z0-9._-]+/i);
-      if (m) return m[0].toUpperCase();
-    }
-    return null;
+  // priority selectors
+  const sels = [
+    '[itemprop="sku"]',
+    '.product-details__product-sku',
+    '[data-product-sku]',
+    '.product-details__sku',
+    '.details-product-code__value',
+    '.ec-store__product-sku',
+    '.ecwid-productBrowser-sku'
+  ];
+
+  for (const s of sels) {
+    const el = document.querySelector(s);
+    if (!el) continue;
+
+    // иногда SKU лежит в content (meta-like), чаще — в textContent
+    const raw = (el.getAttribute?.('content') || el.textContent || '').trim();
+    if (!raw) continue;
+
+    // достаём все токены с допустимыми символами
+    // и отбрасываем слово "SKU"
+    const tokens = raw.toUpperCase().match(/[A-Z0-9._-]+/g) || [];
+    const filtered = tokens.filter(t => t !== 'SKU');
+    if (filtered.length) return filtered[filtered.length - 1]; // последний токен — сам артикул
   }
+  return null;
+}
+
 
   function findOptionBlockByLabel(keywords){
     const labels = document.querySelectorAll('.form-control__label,.ec-form__label,.ecwid-productOptions-name,.details-product-option__name,label');
