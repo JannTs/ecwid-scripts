@@ -1,6 +1,3 @@
-// == Custom Dynamic Pricing for Length × Thickness ==
-// Назначение: рассчитывает стоимость по м² с учётом введённой длины и выбранной толщины
-
 // == Custom Dynamic Pricing for Ecwid Product ==
 // Назначение: рассчитывает цену на основе длины (ввод пользователя), толщины (опция) и фиксированной ширины 1210 мм
 
@@ -44,8 +41,6 @@ function initCustomPricing(page) {
   }
 
   function calculatePrice() {
-
-    console.log('[DEBUG] calculatePrice called');
     let lengthMm = getEnteredLength();
     let thicknessSurcharge = getSelectedThicknessSurcharge();
 
@@ -106,4 +101,12 @@ function initCustomPricing(page) {
   }
 
   ec.OnOptionChanged.add(option => {
-    if (['Длина в мм', 'Length in mm', 'Толщина', 'Thickness'].inclu
+    if (['Длина в мм', 'Length in mm', 'Толщина', 'Thickness'].includes(option.optionName)) {
+      calculatePrice();
+    }
+  });
+
+  // начальный запуск при загрузке страницы
+  setTimeout(() => calculatePrice(), 500);
+}
+
