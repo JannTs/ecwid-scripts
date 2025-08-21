@@ -1,6 +1,9 @@
 // == Custom Dynamic Pricing for Length × Thickness ==
 // Назначение: рассчитывает стоимость по м² с учётом введённой длины и выбранной толщины
 
+// == Custom Dynamic Pricing for Ecwid Product ==
+// Назначение: рассчитывает цену на основе длины (ввод пользователя), толщины (опция) и фиксированной ширины 1210 мм
+
 function waitEcwid(callback) {
   if (typeof Ecwid !== 'undefined' && typeof Ecwid.OnAPILoaded !== 'undefined') {
     callback();
@@ -12,32 +15,26 @@ function waitEcwid(callback) {
 waitEcwid(() => {
   Ecwid.OnAPILoaded.add(() => {
     Ecwid.OnPageLoaded.add(page => {
-      // Проверяем, что мы на странице товара
       if (page.type === 'PRODUCT') {
-        initCustomPricing();
+        initCustomPricing(page); // ✅ передаём page
       }
     });
   });
 });
 
-function initCustomPricing() {
-  const ec = Ecwid; // Упрощение
+function initCustomPricing(page) {
+  const ec = Ecwid;
+  const productId = page.productId;
 
   const FIXED_WIDTH_MM = 1210;
   const BASE_PRICE_PER_SQM = 22;
 
-  // Получаем ID текущего товара
-  const productId = page.productId;
-
-
-  // Получение введенной длины (в мм)
   function getEnteredLength() {
     let value = ec.getProductOptionValue(productId, 'Длина в мм') || ec.getProductOptionValue(productId, 'Length in mm');
     value = parseFloat(value);
     return (value >= 1000 && value <= 12000) ? value : 0;
   }
 
-  // Получение наценки за толщину (в €/м²)
   function getSelectedThicknessSurcharge() {
     let selectedOption = ec.getSelectedOption(productId, 'Толщина') || ec.getSelectedOption(productId, 'Thickness');
     if (selectedOption && selectedOption.surcharge) {
@@ -46,15 +43,13 @@ function initCustomPricing() {
     return 0;
   }
 
-  // Основная функция расчета и обновления цены
   function calculatePrice() {
     let lengthMm = getEnteredLength();
     let thicknessSurcharge = getSelectedThicknessSurcharge();
 
-    // Если длина не введена — цена сбрасывается на 1€
     if (lengthMm === 0) {
-      ec.setProductPrice(productId, 1);
-      renderPriceInfo(null); // очистить информацию
+      ec.setProductPrice(productId, 1); // fallback
+      renderPriceInfo(null); // очистить блок
       return;
     }
 
@@ -66,10 +61,7 @@ function initCustomPricing() {
     let surcharge = areaSqM * thicknessSurcharge;
     let finalPrice = +(basePrice + surcharge).toFixed(2);
 
-    // Установка новой цены
     ec.setProductPrice(productId, finalPrice);
-
-    // Вывод расчетной информации
     renderPriceInfo({
       widthM,
       lengthM,
@@ -80,7 +72,6 @@ function initCustomPricing() {
     });
   }
 
-  // Отображение расчетной информации на странице
   function renderPriceInfo(data) {
     let infoElement = document.getElementById('custom-price-calculation');
 
@@ -112,13 +103,5 @@ function initCustomPricing() {
     `;
   }
 
-  // Слушаем изменения опций
   ec.OnOptionChanged.add(option => {
-    if (['Длина в мм', 'Length in mm', 'Толщина', 'Thickness'].includes(option.optionName)) {
-      calculatePrice();
-    }
-  });
-
-  // Начальный запуск
-  setTimeout(() => calculatePrice(), 500);
-}
+    if (['Длина в мм', 'Length in mm', 'Толщина', 'Thickness'].inclu
