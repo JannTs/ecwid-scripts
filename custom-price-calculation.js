@@ -27,7 +27,8 @@ function initCustomPricing() {
   const BASE_PRICE_PER_SQM = 22;
 
   // Получаем ID текущего товара
-  const productId = ec.getCurrentProduct().id;
+  const productId = page.productId;
+
 
   // Получение введенной длины (в мм)
   function getEnteredLength() {
