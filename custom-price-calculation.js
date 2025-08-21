@@ -44,6 +44,8 @@ function initCustomPricing(page) {
   }
 
   function calculatePrice() {
+
+    console.log('[DEBUG] calculatePrice called');
     let lengthMm = getEnteredLength();
     let thicknessSurcharge = getSelectedThicknessSurcharge();
 
