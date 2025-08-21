@@ -41,6 +41,8 @@ function initCustomPricing(page) {
   }
 
   function calculatePrice() {
+    console.log('[DEBUG] calculatePrice called');
+    
     let lengthMm = getEnteredLength();
     let thicknessSurcharge = getSelectedThicknessSurcharge();
 
@@ -101,6 +103,7 @@ function initCustomPricing(page) {
   }
 
   ec.OnOptionChanged.add(option => {
+    console.log('[DEBUG] Option changed:', option.optionName);
     if (['Длина в мм', 'Length in mm', 'Толщина', 'Thickness'].includes(option.optionName)) {
       calculatePrice();
     }
