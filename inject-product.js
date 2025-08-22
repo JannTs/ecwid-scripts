@@ -4,13 +4,17 @@
   const API_ENDPOINT = 'https://ecwid-custom-pricing.vercel.app/api/custom-product/quote';
   const MIN = 1000, MAX = 12000;
   const PLACEHOLDER = `Numeric from ${MIN} to ${MAX}`;
+  const AUTO_ADD_ENABLED = false;
 
   // === Bootstrap Ecwid ===
   function waitEcwid(cb){ (typeof Ecwid!=='undefined' && Ecwid.OnAPILoaded)?cb():setTimeout(()=>waitEcwid(cb),100); }
 
   waitEcwid(() => {
     Ecwid.OnAPILoaded.add(() => {
-      if (!window.__cpc_wired_autoadd) { wireAutoAdd(); window.__cpc_wired_autoadd = true; }
+  if (!window.__cpc_wired_autoadd && AUTO_ADD_ENABLED) {
+    wireAutoAdd(); 
+    window.__cpc_wired_autoadd = true;
+  }
       Ecwid.OnPageLoaded.add(page => {
         if (page.type !== 'PRODUCT') return;
         applyForWidth1210();
@@ -210,8 +214,10 @@
       }
 
       const pid = String(data.productId);
-      sessionStorage.setItem('cpc_last_created_pid', pid);
-      openProductSafe(pid);
+if (AUTO_ADD_ENABLED) {
+  sessionStorage.setItem('cpc_last_created_pid', pid);
+}
+openProductSafe(pid);
     }catch(err){
       console.error(err);
       alert(`Сеть/браузер: ${err?.message || err}`);
@@ -285,6 +291,7 @@
 
   // === Автодобавление на созданном товаре ===
   function wireAutoAdd(){
+    if (!AUTO_ADD_ENABLED) return;
     Ecwid.OnPageLoaded.add(page=>{
       if (page.type !== 'PRODUCT') return;
       const expected = sessionStorage.getItem('cpc_last_created_pid');
