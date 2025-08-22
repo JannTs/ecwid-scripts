@@ -163,63 +163,24 @@
     return { area, base, extra, final };
   }
 
-  // === Inject button ===
-  //function injectCalcButton(){
-  //  if (document.querySelector('[data-cpc-btn]')) return;
-  //  const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
-  //  if (!panel) return;
-  //  const wrap = document.createElement('div');
-  //  wrap.className = 'form-control form-control--button';
-  //  wrap.style.marginTop = '10px';
-  //  wrap.innerHTML = `
-  //    <button type="button" data-cpc-btn
-  //      class="form-control__button form-control__button--icon-center">
-  //      Рассчитать и купить
-  //    </button>
-  //  `;
-  //  panel.appendChild(wrap);
-  //  document.addEventListener('click', onCalcClick, true);
-  //}
+   === Inject button ===
   function injectCalcButton(){
-  if (document.querySelector('[data-cpc-btn]')) return;
-
-  const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
-  if (!panel) return;
-
-  // Контейнер с «родными» классами + наш флаг --cpc
-  const wrap = document.createElement('div');
-  wrap.className = [
-    'form-control',
-    'form-control--button',
-    'form-control--large',
-    'form-control--primary',
-    'form-control--flexible',
-    'form-control--animated',
-    'details-product-purchase__add-to-bag',
-    'details-product-purchase__add-to-bag--cpc' // наш маркер
-  ].join(' ');
-
-  // Кнопка как у нативной, только с нашим текстом
-  wrap.innerHTML = `
-    <button type="button" data-cpc-btn class="form-control__button form-control__button--icon-center" aria-label="Quote & Add to Bag">
-      <span class="form-control__button-text">Quote &amp; Add to Bag</span>
-      <span class="form-control__button-svg">
-        <span class="svg-icon">
-          <svg width="27" height="23" viewBox="0 0 27 23" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-            <path class="svg-line-check" d="M1.97 11.94L10.03 20 25.217 2" fill="none" fill-rule="evenodd" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path>
-          </svg>
-        </span>
-      </span>
-    </button>
-  `;
-
-  // Вставляем в ту же панель, что и родная «Add to Bag»
-  panel.appendChild(wrap);
-
-  // Один общий обработчик на документ — как у вас было
-  document.addEventListener('click', onCalcClick, true);
-}
-
+    if (document.querySelector('[data-cpc-btn]')) return;
+    const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
+    if (!panel) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'form-control form-control--button';
+    wrap.style.marginTop = '10px';
+    wrap.innerHTML = `
+      <button type="button" data-cpc-btn
+        class="form-control__button form-control__button--icon-center">
+        Рассчитать и купить
+      </button>
+    `;
+    panel.appendChild(wrap);
+    document.addEventListener('click', onCalcClick, true);
+  }
+  
 
   async function onCalcClick(e){
     const btn = e.target.closest('[data-cpc-btn]');
@@ -265,32 +226,19 @@ openProductSafe(pid);
     }
   }
 
-  //function setBtnLoading(btn, loading){
-  //  if (loading){
-  //    btn.setAttribute('disabled','disabled');
-  //    btn.dataset._txt = btn.textContent || '';
-  //    btn.textContent = 'Загрузка...';
-  //    btn.style.opacity='0.7'; btn.style.cursor='wait';
-  //  } else {
-  //    btn.removeAttribute('disabled');
-  //    if (btn.dataset._txt) btn.textContent = btn.dataset._txt;
-  //    btn.style.opacity=''; btn.style.cursor='';
-  //  }
-  //}
   function setBtnLoading(btn, loading){
-  const textSpan = btn.querySelector('.form-control__button-text') || btn;
-  if (loading){
-    btn.setAttribute('disabled','disabled');
-    btn.style.opacity='0.7'; btn.style.cursor='wait';
-    // сохраняем текст именно из спана
-    if (!textSpan.dataset._txt) textSpan.dataset._txt = textSpan.textContent || '';
-    textSpan.textContent = 'Calculating…';
-  } else {
-    btn.removeAttribute('disabled');
-    btn.style.opacity=''; btn.style.cursor='';
-    if (textSpan.dataset._txt) textSpan.textContent = textSpan.dataset._txt;
+    if (loading){
+      btn.setAttribute('disabled','disabled');
+      btn.dataset._txt = btn.textContent || '';
+      btn.textContent = 'Загрузка...';
+      btn.style.opacity='0.7'; btn.style.cursor='wait';
+    } else {
+      btn.removeAttribute('disabled');
+      if (btn.dataset._txt) btn.textContent = btn.dataset._txt;
+      btn.style.opacity=''; btn.style.cursor='';
+    }
   }
-}
+  
 
 
   // === Safe open product (Ecwid.openProduct может отсутствовать) ===
