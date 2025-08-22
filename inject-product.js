@@ -1,38 +1,29 @@
-
 (function(){
-  // === Настройки ===
+  // === Settings ===
   const API_ENDPOINT = 'https://ecwid-custom-pricing.vercel.app/api/custom-product/quote';
   const MIN = 1000, MAX = 12000;
   const PLACEHOLDER = `Numeric from ${MIN} to ${MAX}`;
-  const AUTO_ADD_ENABLED = false;
+  const AUTO_ADD_ENABLED = false; // ← включите true, чтобы автонажимать Add to Bag на созданном товаре
 
-  // === Bootstrap Ecwid ===
-  function waitEcwid(cb){ (typeof Ecwid!=='undefined' && Ecwid.OnAPILoaded)?cb():setTimeout(()=>waitEcwid(cb),100); }
-
+  // === Ecwid boot ===
+  function waitEcwid(cb){ (typeof Ecwid!=='undefined'&&Ecwid.OnAPILoaded)?cb():setTimeout(()=>waitEcwid(cb),100); }
   waitEcwid(() => {
     Ecwid.OnAPILoaded.add(() => {
-  if (!window.__cpc_wired_autoadd && AUTO_ADD_ENABLED) {
-    wireAutoAdd(); 
-    window.__cpc_wired_autoadd = true;
-  }
+      if (!window.__cpc_wired_autoadd) { wireAutoAdd(); window.__cpc_wired_autoadd = true; }
       Ecwid.OnPageLoaded.add(page => {
         if (page.type !== 'PRODUCT') return;
-        applyForWidth1210();
+        window.__cpc_last_page = page;
+        applyForWidth1210(page);
         ensureObserver();
       });
     });
   });
 
-  // === SKU ===
+  // === SKU helpers ===
   function getSku(){
     const sels = [
-      '[itemprop="sku"]',
-      '.product-details__product-sku',
-      '[data-product-sku]',
-      '.product-details__sku',
-      '.details-product-code__value',
-      '.ec-store__product-sku',
-      '.ecwid-productBrowser-sku'
+      '[itemprop="sku"]','.product-details__product-sku','[data-product-sku]',
+      '.product-details__sku','.details-product-code__value','.ec-store__product-sku','.ecwid-productBrowser-sku'
     ];
     for (const s of sels){
       const el = document.querySelector(s);
@@ -45,19 +36,25 @@
     }
     return null;
   }
-  function isTargetProduct(){ const sku = getSku(); return !!sku && /^WIDTH-1210\b/i.test(sku); }
+  const isTargetProduct = () => {
+    const sku = getSku();
+    return !!sku && /^WIDTH-1210\b/i.test(sku);
+  };
+  const isCreatedOneOffPage = (page) => {
+    const expected = sessionStorage.getItem('cpc_last_created_pid');
+    return !!expected && page && String(page.productId) === String(expected);
+  };
 
-  // === Panel: hide qty & controls (CSS) ===
-  function suppressActionPanel(){
+  // === Action panel: hide qty only (controls оставляем) ===
+  function suppressQtyOnly(){
     const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
     if (!panel) return;
     panel.setAttribute('data-cpc-scope','1');
-    if (!document.getElementById('cpc-style-hide')){
+    if (!document.getElementById('cpc-style-hide-qty')){
       const st = document.createElement('style');
-      st.id = 'cpc-style-hide';
+      st.id = 'cpc-style-hide-qty';
       st.textContent = `
-        .product-details__action-panel.details-product-purchase[data-cpc-scope="1"] .details-product-purchase__qty,
-        .product-details__action-panel.details-product-purchase[data-cpc-scope="1"] .details-product-purchase__controls{
+        .product-details__action-panel.details-product-purchase[data-cpc-scope="1"] .details-product-purchase__qty{
           display: none !important;
         }
         .cpc-hint{margin-top:6px;font-size:12px;color:#b91c1c;}
@@ -87,7 +84,6 @@
     }
     return input || null;
   }
-
   function patchLengthField(){
     const input = getLengthInput();
     if (!input) return;
@@ -106,11 +102,9 @@
       input.addEventListener('blur', () => {
         const v = parseInt(input.value || '0', 10);
         if (!Number.isFinite(v) || v < MIN || v > MAX) {
-          input.classList.add('cpc-error');
-          showTinyHint(input, `Enter a number from ${MIN} to ${MAX}`);
+          input.classList.add('cpc-error'); showTinyHint(input, `Enter a number from ${MIN} to ${MAX}`);
         } else {
-          input.classList.remove('cpc-error');
-          hideTinyHint(input);
+          input.classList.remove('cpc-error'); hideTinyHint(input);
         }
       });
       input.dataset.cpcSanitize = '1';
@@ -118,11 +112,7 @@
   }
   function showTinyHint(input, text){
     let hint = input.closest('.form-control')?.querySelector('.cpc-hint');
-    if (!hint) {
-      hint = document.createElement('div');
-      hint.className = 'cpc-hint';
-      input.closest('.form-control')?.appendChild(hint);
-    }
+    if (!hint) { hint = document.createElement('div'); hint.className = 'cpc-hint'; input.closest('.form-control')?.appendChild(hint); }
     hint.textContent = text;
   }
   function hideTinyHint(input){
@@ -153,7 +143,7 @@
     return { ok:true, value: m[0].replace(',','.') };
   }
 
-  // === Client calc (для логов/UX) ===
+  // === Client calc (лог) ===
   function calcClient(lengthMm, thickness){
     const widthM = 1.21;
     const area = +(widthM * (lengthMm/1000)).toFixed(3);
@@ -164,64 +154,73 @@
     return { area, base, extra, final };
   }
 
-  // === Inject button ===
-  //function injectCalcButton(){
-  //  if (document.querySelector('[data-cpc-btn]')) return;
-  //  const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
-  //  if (!panel) return;
-  //  const wrap = document.createElement('div');
-  //  wrap.className = 'form-control form-control--button';
-  //  wrap.style.marginTop = '10px';
-  //  wrap.innerHTML = `
-  //    <button type="button" data-cpc-btn
-  //      class="form-control__button form-control__button--icon-center">
-  //      Рассчитать и купить
-  //    </button>
-  //  `;
-  //  panel.appendChild(wrap);
-  //  document.addEventListener('click', onCalcClick, true);
-  //}
-  function injectCalcButton(){
-  if (document.querySelector('[data-cpc-btn]')) return;
+  // === Native button helpers ===
+  function findNativeAddContainer(){
+    return document.querySelector('.details-product-purchase__add-to-bag'); // контейнер div
+  }
+  function findAddToBagButton(){
+    let btn = document.querySelector('.details-product-purchase__add-to-bag button.form-control__button');
+    if (btn) return btn;
+    const candidates = document.querySelectorAll('button.form-control__button');
+    for (const b of candidates) {
+      const txt = (b.textContent || '').trim();
+      if (/add to bag|в корзину|купить|додати в кошик|до кошика/i.test(txt)) return b;
+    }
+    btn = document.querySelector('.ecwid-btn--submit');
+    return btn || null;
+  }
 
-  const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
-  if (!panel) return;
+  // === Our button (exact placement) ===
+  function ensureOurButtonBeforeNative(page){
+    const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
+    const nativeWrap = findNativeAddContainer();
+    if (!panel || !nativeWrap) return;
 
-  // Контейнер с «родными» классами + наш флаг --cpc
-  const wrap = document.createElement('div');
-  wrap.className = [
-    'form-control',
-    'form-control--button',
-    'form-control--large',
-    'form-control--primary',
-    'form-control--flexible',
-    'form-control--animated',
-    'details-product-purchase__add-to-bag',
-    'details-product-purchase__add-to-bag--cpc' // наш маркер
-  ].join(' ');
+    // если мы на странице созданного one-off — показываем нативную, нашу скрываем
+    if (isCreatedOneOffPage(page)) {
+      nativeWrap.style.display = ''; nativeWrap.removeAttribute('data-cpc-native-hidden');
+      const ourWrap = document.querySelector('.details-product-purchase__add-to-bag--cpc');
+      if (ourWrap) ourWrap.style.display = 'none';
+      return;
+    }
 
-  // Кнопка как у нативной, только с нашим текстом
-  wrap.innerHTML = `
-    <button type="button" data-cpc-btn class="form-control__button form-control__button--icon-center" aria-label="Quote & Add to Bag">
-      <span class="form-control__button-text">Quote &amp; Add to Bag</span>
-      <span class="form-control__button-svg">
-        <span class="svg-icon">
-          <svg width="27" height="23" viewBox="0 0 27 23" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-            <path class="svg-line-check" d="M1.97 11.94L10.03 20 25.217 2" fill="none" fill-rule="evenodd" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path>
-          </svg>
-        </span>
-      </span>
-    </button>
-  `;
+    // базовый товар: вставляем нашу кнопку перед нативной и скрываем нативную
+    let ourWrap = document.querySelector('.details-product-purchase__add-to-bag--cpc');
+    if (!ourWrap) {
+      ourWrap = document.createElement('div');
+      ourWrap.className = [
+        'form-control','form-control--button','form-control--large','form-control--primary',
+        'form-control--flexible','form-control--animated',
+        'details-product-purchase__add-to-bag','details-product-purchase__add-to-bag--cpc'
+      ].join(' ');
+      ourWrap.innerHTML = `
+        <button type="button" data-cpc-btn class="form-control__button form-control__button--icon-center" aria-label="Quote & Add to Bag">
+          <span class="form-control__button-text">Quote &amp; Add to Bag</span>
+          <span class="form-control__button-svg">
+            <span class="svg-icon">
+              <svg width="27" height="23" viewBox="0 0 27 23" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                <path class="svg-line-check" d="M1.97 11.94L10.03 20 25.217 2" fill="none" fill-rule="evenodd" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path>
+              </svg>
+            </span>
+          </span>
+        </button>
+      `;
+      nativeWrap.parentNode.insertBefore(ourWrap, nativeWrap); // ← точное позиционирование
+      document.addEventListener('click', onCalcClick, true);
+    } else {
+      // убедимся, что порядок верный
+      if (ourWrap.nextElementSibling !== nativeWrap) {
+        nativeWrap.parentNode.insertBefore(ourWrap, nativeWrap);
+      }
+      ourWrap.style.display = '';
+    }
 
-  // Вставляем в ту же панель, что и родная «Add to Bag»
-  panel.appendChild(wrap);
+    // скрываем нативную, но не удаляем
+    nativeWrap.style.display = 'none';
+    nativeWrap.setAttribute('data-cpc-native-hidden','1');
+  }
 
-  // Один общий обработчик на документ — как у вас было
-  document.addEventListener('click', onCalcClick, true);
-}
-
-
+  // === Click handler ===
   async function onCalcClick(e){
     const btn = e.target.closest('[data-cpc-btn]');
     if (!btn) return;
@@ -231,33 +230,18 @@
     const L = readLengthMm();   if (!L.ok) return alert(L.reason);
     const T = readThickness();  if (!T.ok) return alert(T.reason);
 
-    // локальный расчёт — лог
     const c = calcClient(L.value, T.value);
     console.log('[CPC] area:', c.area, 'base:', c.base, 'extra:', c.extra, 'final:', c.final);
 
     const payload = { lengthMm: L.value, thickness: T.value, baseSku };
     try{
       setBtnLoading(btn,true);
-      const r = await fetch(API_ENDPOINT, {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const text = await r.text();
-      let data = {}; try { data = JSON.parse(text); } catch(_){}
-      console.log('[CPC] response', r.status, r.statusText, data || text);
-
-      if (!r.ok || !data.ok) {
-        const cause = (data && data.error) ? data.error : (text || `${r.status} ${r.statusText}`) || 'Unknown error';
-        alert(`Ошибка сервера:\n${cause}`);
-        return;
-      }
-
+      const r = await fetch(API_ENDPOINT, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
+      const text = await r.text(); let data = {}; try { data = JSON.parse(text); } catch(_){}
+      if (!r.ok || !data.ok) { const cause = (data && data.error) ? data.error : (text || `${r.status} ${r.statusText}`); alert(`Ошибка сервера:\n${cause}`); return; }
       const pid = String(data.productId);
-if (AUTO_ADD_ENABLED) {
-  sessionStorage.setItem('cpc_last_created_pid', pid);
-}
-openProductSafe(pid);
+      if (AUTO_ADD_ENABLED) sessionStorage.setItem('cpc_last_created_pid', pid);
+      openProductSafe(pid);
     }catch(err){
       console.error(err);
       alert(`Сеть/браузер: ${err?.message || err}`);
@@ -265,72 +249,27 @@ openProductSafe(pid);
       setBtnLoading(btn,false);
     }
   }
-
-  //function setBtnLoading(btn, loading){
-  //  if (loading){
-  //    btn.setAttribute('disabled','disabled');
-  //    btn.dataset._txt = btn.textContent || '';
-  //    btn.textContent = 'Загрузка...';
-  //    btn.style.opacity='0.7'; btn.style.cursor='wait';
-  //  } else {
-  //    btn.removeAttribute('disabled');
-  //    if (btn.dataset._txt) btn.textContent = btn.dataset._txt;
-  //    btn.style.opacity=''; btn.style.cursor='';
-  //  }
-  //}
   function setBtnLoading(btn, loading){
-  const textSpan = btn.querySelector('.form-control__button-text') || btn;
-  if (loading){
-    btn.setAttribute('disabled','disabled');
-    btn.style.opacity='0.7'; btn.style.cursor='wait';
-    // сохраняем текст именно из спана
-    if (!textSpan.dataset._txt) textSpan.dataset._txt = textSpan.textContent || '';
-    textSpan.textContent = 'Calculating…';
-  } else {
-    btn.removeAttribute('disabled');
-    btn.style.opacity=''; btn.style.cursor='';
-    if (textSpan.dataset._txt) textSpan.textContent = textSpan.dataset._txt;
+    const textSpan = btn.querySelector('.form-control__button-text') || btn;
+    if (loading){
+      btn.setAttribute('disabled','disabled'); btn.style.opacity='0.7'; btn.style.cursor='wait';
+      if (!textSpan.dataset._txt) textSpan.dataset._txt = textSpan.textContent || '';
+      textSpan.textContent = 'Calculating…';
+    } else {
+      btn.removeAttribute('disabled'); btn.style.opacity=''; btn.style.cursor='';
+      if (textSpan.dataset._txt) textSpan.textContent = textSpan.dataset._txt;
+    }
   }
-}
 
-
-  // === Safe open product (Ecwid.openProduct может отсутствовать) ===
-  function isHashRouting(){ return /#!/.test(location.href); }
+  // === Open product safely ===
+  const isHashRouting = () => /#!/.test(location.href);
   function openProductSafe(pid){
-    try {
-      if (window.Ecwid && typeof Ecwid.openProduct === 'function') {
-        Ecwid.openProduct('p' + pid);
-        return;
-      }
-    } catch(_) {}
-    if (isHashRouting()) {
-      const base = location.origin + location.pathname;
-      location.href = `${base}#!/p/${pid}`;
-      return;
-    }
-    // fallback: клик по ссылке с #!
-    const a = document.createElement('a');
-    a.href = `#!/p/${pid}`;
-    a.style.display = 'none';
-    document.body.appendChild(a); a.click(); a.remove();
+    try { if (window.Ecwid && typeof Ecwid.openProduct === 'function') { Ecwid.openProduct('p'+pid); return; } } catch(_){}
+    if (isHashRouting()) { const base = location.origin + location.pathname; location.href = `${base}#!/p/${pid}`; return; }
+    const a = document.createElement('a'); a.href = `#!/p/${pid}`; a.style.display = 'none'; document.body.appendChild(a); a.click(); a.remove();
   }
 
-  // === Нахождение нативной кнопки Add to Bag ===
-  function findAddToBagButton(){
-    // 1) точный контейнер Ecwid
-    let btn = document.querySelector('.details-product-purchase__add-to-bag button.form-control__button');
-    if (btn) return btn;
-    // 2) общий стиль кнопки + проверка текста
-    const candidates = document.querySelectorAll('button.form-control__button');
-    for (const b of candidates) {
-      const txt = (b.textContent || '').trim();
-      if (/add to bag|в корзину|купить|додати в кошик|до кошика/i.test(txt)) return b;
-    }
-    // 3) старый селектор
-    btn = document.querySelector('.ecwid-btn--submit');
-    if (btn) return btn;
-    return null;
-  }
+  // === Auto add flow (optional) ===
   function clickAddToBagWithRetries(maxTries = 8, delay = 250){
     let tries = 0;
     (function tryClick(){
@@ -343,37 +282,38 @@ openProductSafe(pid);
       }
     })();
   }
-
-  // === Автодобавление на созданном товаре ===
   function wireAutoAdd(){
     if (!AUTO_ADD_ENABLED) return;
     Ecwid.OnPageLoaded.add(page=>{
       if (page.type !== 'PRODUCT') return;
       const expected = sessionStorage.getItem('cpc_last_created_pid');
       if (!expected || String(page.productId) !== String(expected)) return;
-      // скрыть нашу кнопку на созданной карточке (не удаляем)
-      const ourBtnWrap = document.querySelector('[data-cpc-btn]')?.closest('.form-control.form-control--button');
-      if (ourBtnWrap) ourBtnWrap.style.display = 'none';
-      // клик по нативной кнопке
+      // наша кнопка на созданной карточке не нужна
+      const our = document.querySelector('.details-product-purchase__add-to-bag--cpc');
+      if (our) our.style.display = 'none';
+      // обязательно показать нативную
+      const nativeWrap = findNativeAddContainer();
+      if (nativeWrap) nativeWrap.style.display = '';
       setTimeout(() => clickAddToBagWithRetries(), 300);
     });
   }
 
-  // === Применение для целевого товара ===
-  function applyForWidth1210(){
+  // === Apply for target product ===
+  function applyForWidth1210(page){
     if (!isTargetProduct()) return;
-    suppressActionPanel();
+    suppressQtyOnly();
     patchLengthField();
-    injectCalcButton();
+    ensureOurButtonBeforeNative(page);
   }
 
-  // === Observer: Ecwid перерисовывает DOM ===
+  // === Observe DOM re-renders ===
   function ensureObserver(){
     if (window.__cpcMo) return;
     const root = document.querySelector('.ec-store, .ecwid-productBrowser, body') || document.body;
-    const mo = new MutationObserver(() => applyForWidth1210());
+    const mo = new MutationObserver(() => applyForWidth1210(window.__cpc_last_page));
     mo.observe(root, { childList:true, subtree:true });
     window.__cpcMo = mo;
   }
 
 })();
+
