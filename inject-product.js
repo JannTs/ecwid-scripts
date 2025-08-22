@@ -17,7 +17,11 @@
       }
       Ecwid.OnPageLoaded.add(page => {
         if (page.type !== 'PRODUCT') return;
+        // запомним текущий productId для распознавания one-off
+        window.__cpc_current_pid = String(page.productId || '');
         applyForWidth1210();
+        // если мы на созданной карточке — переключим кнопку в режим "Add to Bag"
+        adjustButtonForOneOff();
         ensureObserver();
       });
     });
@@ -45,7 +49,10 @@
     }
     return null;
   }
-  function isTargetProduct(){ const sku = getSku(); return !!sku && /^WIDTH-1210\b/i.test(sku); }
+  function isTargetProduct(){
+    const sku = getSku();
+    return !!sku && /^WIDTH-1210\b/i.test(sku);
+  }
 
   // === Panel: hide qty & controls (CSS) ===
   function suppressActionPanel(){
@@ -153,7 +160,7 @@
     return { ok:true, value: m[0].replace(',','.') };
   }
 
-  // === Client calc (для логов/UX) ===
+  // === Client calc (лог/UX) ===
   function calcClient(lengthMm, thickness){
     const widthM = 1.21;
     const area = +(widthM * (lengthMm/1000)).toFixed(3);
@@ -173,12 +180,32 @@
     wrap.className = 'form-control form-control--button';
     wrap.style.marginTop = '10px';
     wrap.innerHTML = `
-      <button type="button" data-cpc-btn class="form-control__button form-control__button--icon-center">
+      <button type="button" data-cpc-btn class="form-control__button form-control__button--icon-center" data-cpc-mode="quote">
         <span class="form-control__button-text">Quote &amp; Add to Bag</span>
       </button>
     `;
     panel.appendChild(wrap);
-    document.addEventListener('click', onCalcClick, true);
+    if (!window.__cpc_click_bound) {
+      document.addEventListener('click', onCalcClick, true);
+      window.__cpc_click_bound = true;
+    }
+  }
+
+  // переключение кнопки в режим "Add to Bag" на созданной карточке
+  function adjustButtonForOneOff(){
+    const btn = document.querySelector('[data-cpc-btn]');
+    const expected = sessionStorage.getItem('cpc_last_created_pid') || '';
+    const current = String(window.__cpc_current_pid || '');
+    if (!btn) return;
+    if (expected && current === expected) {
+      btn.setAttribute('data-cpc-mode','add');
+      const textSpan = btn.querySelector('.form-control__button-text') || btn;
+      textSpan.textContent = 'Add to Bag';
+    } else {
+      btn.setAttribute('data-cpc-mode','quote');
+      const textSpan = btn.querySelector('.form-control__button-text') || btn;
+      textSpan.textContent = 'Quote & Add to Bag';
+    }
   }
 
   async function onCalcClick(e){
@@ -186,11 +213,25 @@
     if (!btn) return;
     e.preventDefault();
 
+    const mode = btn.getAttribute('data-cpc-mode') || 'quote';
+
+    // Если мы уже на созданной карточке — ведём себя как "Add to Bag"
+    if (mode === 'add') {
+      const native = findAddToBagButton();
+      if (native) {
+        native.click();
+        setTimeout(() => (window.Ecwid && Ecwid.openPage) ? Ecwid.openPage('cart') : (location.hash='#!/cart'), 400);
+      } else {
+        alert('Add to Bag button is unavailable.');
+      }
+      return;
+    }
+
+    // Иначе — режим расчёта и создания one-off
     const baseSku = getSku();
     const L = readLengthMm();   if (!L.ok) return alert(L.reason);
     const T = readThickness();  if (!T.ok) return alert(T.reason);
 
-    // локальный расчёт — лог
     const c = calcClient(L.value, T.value);
     console.log('[CPC] area:', c.area, 'base:', c.base, 'extra:', c.extra, 'final:', c.final);
 
@@ -213,10 +254,10 @@
       }
 
       const pid = String(data.productId);
-      if (AUTO_ADD_ENABLED) {
-        sessionStorage.setItem('cpc_last_created_pid', pid);
-      }
+      // Всегда сохраняем маркер one-off, даже при AUTO_ADD=false (нужно для режима "Add to Bag")
+      sessionStorage.setItem('cpc_last_created_pid', pid);
       openProductSafe(pid);
+
     }catch(err){
       console.error(err);
       alert(`Сеть/браузер: ${err?.message || err}`);
@@ -225,7 +266,7 @@
     }
   }
 
-  // === Loading text: меняем только надпись ===
+  // === Loading text ===
   function setBtnLoading(btn, loading){
     const textSpan = btn.querySelector('.form-control__button-text') || btn;
     if (loading){
@@ -240,7 +281,7 @@
     }
   }
 
-  // === Safe open product (Ecwid.openProduct может отсутствовать) ===
+  // === Safe open product ===
   function isHashRouting(){ return /#!/.test(location.href); }
   function openProductSafe(pid){
     try {
@@ -254,53 +295,47 @@
       location.href = `${base}#!/p/${pid}`;
       return;
     }
-    // fallback: клик по ссылке с #!
     const a = document.createElement('a');
     a.href = `#!/p/${pid}`;
     a.style.display = 'none';
     document.body.appendChild(a); a.click(); a.remove();
   }
 
-  // === Нахождение нативной кнопки Add to Bag ===
+  // === Нативная Add to Bag ===
   function findAddToBagButton(){
-    // 1) точный контейнер Ecwid
     let btn = document.querySelector('.details-product-purchase__add-to-bag button.form-control__button');
     if (btn) return btn;
-    // 2) общий стиль кнопки + проверка текста
     const candidates = document.querySelectorAll('button.form-control__button');
     for (const b of candidates) {
       const txt = (b.textContent || '').trim();
       if (/add to bag|в корзину|купить|додати в кошик|до кошика/i.test(txt)) return b;
     }
-    // 3) старый селектор
     btn = document.querySelector('.ecwid-btn--submit');
     if (btn) return btn;
     return null;
   }
+
+  // === Автодобавление на созданном товаре (опционально) ===
   function clickAddToBagWithRetries(maxTries = 8, delay = 250){
     let tries = 0;
     (function tryClick(){
       const btn = findAddToBagButton();
       if (btn) {
         btn.click();
-        setTimeout(() => (window.Ecwid && Ecwid.openPage) ? Ecwid.openPage('cart') : location.hash = '#!/cart', 400);
+        setTimeout(() => (window.Ecwid && Ecwid.openPage) ? Ecwid.openPage('cart') : (location.hash='#!/cart'), 400);
       } else if (tries++ < maxTries) {
         setTimeout(tryClick, delay);
       }
     })();
   }
-
-  // === Автодобавление на созданном товаре ===
   function wireAutoAdd(){
     if (!AUTO_ADD_ENABLED) return;
     Ecwid.OnPageLoaded.add(page=>{
       if (page.type !== 'PRODUCT') return;
       const expected = sessionStorage.getItem('cpc_last_created_pid');
       if (!expected || String(page.productId) !== String(expected)) return;
-      // скрыть нашу кнопку на созданной карточке (не удаляем)
       const ourBtnWrap = document.querySelector('[data-cpc-btn]')?.closest('.form-control.form-control--button');
       if (ourBtnWrap) ourBtnWrap.style.display = 'none';
-      // клик по нативной кнопке
       setTimeout(() => clickAddToBagWithRetries(), 300);
     });
   }
@@ -317,10 +352,12 @@
   function ensureObserver(){
     if (window.__cpcMo) return;
     const root = document.querySelector('.ec-store, .ecwid-productBrowser, body') || document.body;
-    const mo = new MutationObserver(() => applyForWidth1210());
+    const mo = new MutationObserver(() => {
+      applyForWidth1210();
+      adjustButtonForOneOff();
+    });
     mo.observe(root, { childList:true, subtree:true });
     window.__cpcMo = mo;
   }
 
 })();
-
