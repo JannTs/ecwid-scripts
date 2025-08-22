@@ -3,7 +3,7 @@
   const API_ENDPOINT = 'https://ecwid-custom-pricing.vercel.app/api/custom-product/quote';
   const MIN = 1000, MAX = 12000;
   const PLACEHOLDER = `Numeric from ${MIN} to ${MAX}`;
-  const AUTO_ADD_ENABLED = false; // ← включите true, чтобы автонажимать Add to Bag на созданном товаре
+  const AUTO_ADD_ENABLED = true; // ← включите true, чтобы автонажимать Add to Bag на созданном товаре
 
   // === Ecwid boot ===
   function waitEcwid(cb){ (typeof Ecwid!=='undefined'&&Ecwid.OnAPILoaded)?cb():setTimeout(()=>waitEcwid(cb),100); }
