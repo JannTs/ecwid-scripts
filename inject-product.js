@@ -1,39 +1,25 @@
-<script>
-(function(){
-  const API_ENDPOINT = 'https://ecwid-custom-pricing.vercel.app/api/custom-product/quote';
-  const MIN = 1000, MAX = 12000;
-  const PLACEHOLDER_TEXT = `Numeric from ${MIN} to ${MAX}`;
 
-  function waitEcwid(cb){ (typeof Ecwid!=='undefined'&&Ecwid.OnAPILoaded)?cb():setTimeout(()=>waitEcwid(cb),100); }
+(function(){
+  const MIN = 1000, MAX = 12000;
+  const PLACEHOLDER = `Numeric from ${MIN} to ${MAX}`;
+
+  function waitEcwid(cb){ (typeof Ecwid!=='undefined' && Ecwid.OnAPILoaded)?cb():setTimeout(()=>waitEcwid(cb),100); }
 
   waitEcwid(() => {
     Ecwid.OnAPILoaded.add(() => {
       Ecwid.OnPageLoaded.add(page => {
         if (page.type !== 'PRODUCT') return;
-        const sku = getSku();
-        if (!sku || !/^WIDTH-1210\b/i.test(sku)) return;
-
-        ensureLengthFieldUI();         // ⚙️ патчим плейсхолдер + инпут
-        injectButton();
-        wireAutoAdd();
-
-        // На случай динамических перерисовок — наблюдаем и перепатчиваем
-        attachObserver();
+        applyForWidth1210();
+        // На случай перерисовок Ecwid — повторно применяем
+        ensureObserver();
       });
     });
   });
 
-  // ============ SKU ============
+  // --- 1) Проверка SKU ---
   function getSku(){
-    const sels = [
-      '[itemprop="sku"]',
-      '.product-details__product-sku',
-      '[data-product-sku]',
-      '.product-details__sku',
-      '.details-product-code__value',
-      '.ec-store__product-sku',
-      '.ecwid-productBrowser-sku'
-    ];
+    // Ваш DOM: <div class="product-details__product-sku" itemprop="sku">SKU  WIDTH-1210</div>
+    const sels = ['[itemprop="sku"]','.product-details__product-sku','[data-product-sku]'];
     for (const s of sels){
       const el = document.querySelector(s);
       if (!el) continue;
@@ -45,23 +31,41 @@
     }
     return null;
   }
+  function isTargetProduct(){ const sku = getSku(); return !!sku && /^WIDTH-1210\b/i.test(sku); }
 
-  // ============ Length input + placeholder ============
-  function getLengthInput(){
-    let input =
-      document.querySelector('input[aria-label="Length (mm)"]') ||
-      document.querySelector('input[aria-label*="Length"]') ||
-      document.querySelector('input[aria-label*="Длина"]') ||
-      document.querySelector('input[aria-label*="Довжина"]');
-
-    if (!input) {
-      const title = Array.from(
-        document.querySelectorAll('.details-product-option__title, .product-details-module__title')
-      ).find(el => /length\s*\(mm\)|length/i.test(el.textContent || ''));
-      const container = title?.closest('.product-details-module') || title?.parentElement;
-      input = container?.querySelector('input.form-control__text') || container?.querySelector('input');
+  // --- 2) Подавление видимости qty и controls (без удаления) ---
+  function suppressActionPanel(){
+    const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
+    if (!panel) return;
+    // помечаем контейнер
+    panel.setAttribute('data-cpc-scope','1');
+    // инжектим CSS единожды
+    if (!document.getElementById('cpc-style-hide')){
+      const st = document.createElement('style');
+      st.id = 'cpc-style-hide';
+      st.textContent = `
+        .product-details__action-panel.details-product-purchase[data-cpc-scope="1"] .details-product-purchase__qty,
+        .product-details__action-panel.details-product-purchase[data-cpc-scope="1"] .details-product-purchase__controls{
+          display: none !important;
+        }
+      `;
+      document.head.appendChild(st);
     }
+  }
 
+  // --- 3) Настройка поля длины и плейсхолдера ---
+  function getLengthInput(){
+    // 3.1 Ищем по aria-label
+    let input = document.querySelector('input[aria-label="Length (mm)"]')
+             || document.querySelector('input[aria-label*="Length"]');
+    // 3.2 Если нет — ищем модуль с заголовком "Length (mm)"
+    if (!input) {
+      const title = Array.from(document.querySelectorAll('.product-details-module__title, .details-product-option__title'))
+        .find(el => /length\s*\(mm\)|\blength\b/i.test(el.textContent || ''));
+      const mod = title?.closest('.product-details-module') || title?.closest('.details-product-option');
+      input = mod?.querySelector('input.form-control__text') || mod?.querySelector('input');
+    }
+    // 3.3 Фолбэк по плейсхолдеру
     if (!input) {
       const ph = Array.from(document.querySelectorAll('.form-control__placeholder-inner'))
         .find(el => /enter your text|numeric from/i.test(el.textContent || ''));
@@ -70,200 +74,48 @@
     return input || null;
   }
 
-  function ensureLengthFieldUI(){
+  function patchLengthField(){
     const input = getLengthInput();
     if (!input) return;
 
-    // Настройки для числового ввода
-    input.placeholder = PLACEHOLDER_TEXT;
+    // числовой ввод
     input.setAttribute('inputmode','numeric');
     input.setAttribute('pattern','[0-9]*');
-    input.setAttribute('maxlength','6'); // 12000 — максимум 5-6 символов
+    input.setAttribute('maxlength','6'); // до 12000
+    input.placeholder = PLACEHOLDER;
 
-    // Устанавливаем всплывающий плейсхолдер Ecwid
+    // обновляем «оверлейный» плейсхолдер Ecwid
     const phInner = input.closest('.form-control')?.querySelector('.form-control__placeholder-inner');
-    if (phInner && phInner.textContent?.trim() !== PLACEHOLDER_TEXT) {
-      phInner.textContent = PLACEHOLDER_TEXT;
+    if (phInner && phInner.textContent?.trim() !== PLACEHOLDER) {
+      phInner.textContent = PLACEHOLDER;
     }
 
-    // Санитизация ввода: оставляем только цифры
-    if (!input.dataset.cpcBound) {
+    // аккуратная санитизация: только цифры
+    if (!input.dataset.cpcSanitize) {
       input.addEventListener('input', () => {
-        const onlyDigits = (input.value || '').replace(/[^\d]/g, '');
-        if (onlyDigits !== input.value) input.value = onlyDigits;
+        const digits = (input.value || '').replace(/[^\d]/g,'');
+        if (digits !== input.value) input.value = digits;
       });
-      input.addEventListener('blur', () => {
-        const v = parseInt(input.value || '0', 10);
-        if (!Number.isFinite(v) || v < MIN || v > MAX) {
-          // Подсветим ошибку валидации
-          input.classList.add('cpc-error');
-          // Можно показать мини-подсказку
-          showTinyHint(input, `Enter a number from ${MIN} to ${MAX}`);
-        } else {
-          input.classList.remove('cpc-error');
-          hideTinyHint(input);
-        }
-      });
-      input.dataset.cpcBound = '1';
-      injectTinyHintStyles();
+      input.dataset.cpcSanitize = '1';
     }
   }
 
-  function showTinyHint(input, text){
-    let hint = input.closest('.form-control')?.querySelector('.cpc-hint');
-    if (!hint) {
-      hint = document.createElement('div');
-      hint.className = 'cpc-hint';
-      input.closest('.form-control')?.appendChild(hint);
-    }
-    hint.textContent = text;
-  }
-  function hideTinyHint(input){
-    const hint = input.closest('.form-control')?.querySelector('.cpc-hint');
-    if (hint) hint.remove();
-  }
-  function injectTinyHintStyles(){
-    if (document.getElementById('cpc-hint-style')) return;
-    const st = document.createElement('style');
-    st.id = 'cpc-hint-style';
-    st.textContent = `
-      .cpc-hint{margin-top:6px;font-size:12px;color:#b91c1c;}
-      input.cpc-error{outline:1px solid #ef4444;}
-    `;
-    document.head.appendChild(st);
+  // --- 4) Применение для целевых товаров ---
+  function applyForWidth1210(){
+    if (!isTargetProduct()) return;
+    suppressActionPanel();
+    patchLengthField();
   }
 
-  function attachObserver(){
-    const root = document.querySelector('.ec-store, .ecwid-productBrowser, body');
-    if (!root || root.dataset.cpcObserved) return;
-    const mo = new MutationObserver(() => {
-      // Если Ecwid перерисовал блок — перепатчим плейсхолдер
-      ensureLengthFieldUI();
-    });
+  // --- 5) Наблюдение за перерисовками (Ecwid часто обновляет DOM) ---
+  function ensureObserver(){
+    if (window.__cpcMo) return;
+    const root = document.querySelector('.ec-store, .ecwid-productBrowser, body') || document.body;
+    const mo = new MutationObserver(() => applyForWidth1210());
     mo.observe(root, { childList:true, subtree:true });
-    root.dataset.cpcObserved = '1';
+    window.__cpcMo = mo;
   }
 
-  // ============ Толщина/Длина чтение ============
-  function findOptionBlockByLabel(keywords){
-    const labels = document.querySelectorAll('.form-control__label,.ec-form__label,.ecwid-productOptions-name,.details-product-option__title,.details-product-option__name,label');
-    const keys = keywords.map(k=>k.toLowerCase());
-    for (const L of labels){
-      const t = (L.textContent||'').toLowerCase();
-      if (!keys.some(k=>t.includes(k))) continue;
-      let n=L; for (let i=0;i<5&&n;i++){
-        if (n.matches?.('.form-control,.ec-form__row,.ecwid-productOptions-option,.product-details-module,.details-product-option')) return n;
-        n=n.parentElement;
-      }
-      return L;
-    }
-    return null;
-  }
-  const findSelect = b => b && (b.querySelector('select,.form-control__select,.ec-select') || b.querySelector('select'));
-
-  function readLengthMm(){
-    const inp = getLengthInput();
-    if (!inp) return { ok:false, reason:'Length field not found' };
-    const raw = (inp.value || '').trim();
-    const num = parseInt(raw, 10);
-    if (!Number.isFinite(num)) return { ok:false, reason:`Enter number ${MIN}..${MAX} mm` };
-    if (num < MIN || num > MAX) return { ok:false, reason:`Length ${MIN}..${MAX} mm` };
-    return { ok:true, value:num };
-  }
-
-  function readThickness(){
-    const blk = findOptionBlockByLabel(['толщина','thickness']);
-    const sel = findSelect(blk);
-    if (!sel) return { ok:false, reason:'Select thickness' };
-    const txt = sel.options[sel.selectedIndex]?.textContent || '';
-    const m = txt.match(/0[.,]5|0[.,]6|0[.,]7/);
-    if (!m) return { ok:false, reason:'Thickness 0.5 / 0.6 / 0.7 mm' };
-    return { ok:true, value:m[0].replace(',','.') };
-  }
-
-  // ============ Кнопка и клик ============
-  function injectButton(){
-    if (document.querySelector('[data-cpc-btn]')) return;
-    const host = document.querySelector('.details-product-purchase,.product-details__product-controls,.ecwid-productDetails') || document.querySelector('.ec-store');
-    if (!host) return setTimeout(injectButton, 300);
-
-    const wrap = document.createElement('div');
-    wrap.style.marginTop='10px';
-    wrap.innerHTML = `
-      <a href="#" data-cpc-btn class="form-control form-control--button" style="display:inline-block;">
-        <span class="details-product-purchase__button">Рассчитать и купить</span>
-      </a>
-      <div style="margin-top:6px;color:#6b7280;font-size:12px">Цена по м² и толщине → добавим товар в корзину.</div>
-    `;
-    host.appendChild(wrap);
-
-    document.addEventListener('click', onBuyClick, true);
-  }
-
-  async function onBuyClick(e){
-    const btn = e.target.closest('[data-cpc-btn]');
-    if (!btn) return;
-    e.preventDefault();
-
-    const baseSku = getSku();
-    const L = readLengthMm();  if (!L.ok) return alert(L.reason);
-    const T = readThickness(); if (!T.ok) return alert(T.reason);
-
-    try{
-      btnToggle(btn,true);
-      const r = await fetch(API_ENDPOINT, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ lengthMm: L.value, thickness: T.value, baseSku })
-      });
-      const data = await r.json().catch(()=> ({}));
-      if (!r.ok || !data.ok) throw new Error(data?.error || 'Server error');
-
-      const pid = String(data.productId);
-      sessionStorage.setItem('cpc_last_created_pid', pid);
-      Ecwid.openProduct('p'+pid);
-    }catch(err){
-      console.error(err);
-      alert('Не удалось создать товар. Попробуйте позже.');
-    }finally{
-      btnToggle(btn,false);
-    }
-  }
-
-  function btnToggle(btn, loading){
-    const span = btn.querySelector('.details-product-purchase__button') || btn;
-    if (loading){
-      btn.setAttribute('disabled','disabled');
-      btn.style.opacity='0.6'; btn.style.cursor='wait';
-      span.dataset._txt = span.textContent;
-      span.textContent = 'Загрузка...';
-    } else {
-      btn.removeAttribute('disabled');
-      btn.style.opacity=''; btn.style.cursor='';
-      if (span.dataset._txt) span.textContent = span.dataset._txt;
-    }
-  }
-
-  // ============ Автодобавление ============
-  function wireAutoAdd(){
-    Ecwid.OnPageLoaded.add(page=>{
-      if (page.type!=='PRODUCT') return;
-      const expected = sessionStorage.getItem('cpc_last_created_pid');
-      if (!expected || String(page.productId)!==expected) return;
-
-      setTimeout(()=>{
-        const buyBtn = document.querySelector('.details-product-purchase__button,.ecwid-btn--submit');
-        if (buyBtn) {
-          buyBtn.click();
-          setTimeout(()=> Ecwid.openPage('cart'), 400);
-        } else {
-          setTimeout(()=>{
-            const b2 = document.querySelector('.details-product-purchase__button,.ecwid-btn--submit');
-            if (b2){ b2.click(); setTimeout(()=> Ecwid.openPage('cart'), 400); }
-          }, 500);
-        }
-      }, 300);
-    });
-  }
 })();
-</script>
+
+
