@@ -12,17 +12,21 @@
   waitEcwid(() => {
     Ecwid.OnAPILoaded.add(() => {
       if (!window.__cpc_wired_autoadd && AUTO_ADD_ENABLED) {
-        wireAutoAdd(); 
+        wireAutoAdd();
         window.__cpc_wired_autoadd = true;
       }
       Ecwid.OnPageLoaded.add(page => {
         if (page.type !== 'PRODUCT') return;
-        // запомним текущий productId для распознавания one-off
+
         window.__cpc_current_pid = String(page.productId || '');
-        applyForWidth1210();
-        // если мы на созданной карточке — переключим кнопку в режим "Add to Bag"
-        adjustButtonForOneOff();
-        ensureObserver();
+        window.__cpc_applied_pid = null; // сброс на новый товар
+
+        // ВАЖНО: работаем только на SKU ровно WIDTH-1210
+        if (isTargetProduct()) {
+          safeScheduleApply();
+          ensureObserver(); // наблюдаем только в карточке нужного товара
+        }
+        // на остальных товарах — ничего не делаем
       });
     });
   });
@@ -49,12 +53,24 @@
     }
     return null;
   }
-  function isTargetProduct(){
+
+  // кэшируем SKU на текущий productId, чтобы не гонять селекторы на каждую мутацию
+  function getSkuCached(){
+    const pid = String(window.__cpc_current_pid || '');
+    if (!pid) return getSku();
+    window.__cpc_sku_cache = window.__cpc_sku_cache || {};
+    if (window.__cpc_sku_cache[pid] !== undefined) return window.__cpc_sku_cache[pid];
     const sku = getSku();
-    return !!sku && /^WIDTH-1210\b/i.test(sku);
+    window.__cpc_sku_cache[pid] = sku;
+    return sku;
   }
 
-  // === Panel: hide qty & controls (CSS) ===
+  // ТОЛЬКО ровно WIDTH-1210 (без суффиксов)
+  function isTargetProduct(){
+    return getSkuCached() === 'WIDTH-1210';
+  }
+
+  // === Panel: hide qty & controls (CSS) — вызываем только на базовом товаре ===
   function suppressActionPanel(){
     const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
     if (!panel) return;
@@ -171,7 +187,7 @@
     return { area, base, extra, final };
   }
 
-  // === Inject button ===
+  // === Inject button (только на базовом товаре) ===
   function injectCalcButton(){
     if (document.querySelector('[data-cpc-btn]')) return;
     const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
@@ -191,19 +207,18 @@
     }
   }
 
-  // переключение кнопки в режим "Add to Bag" на созданной карточке
+  // (оставляем для совместимости, но на one-off мы не инжектим кнопку, так что тут обычно нечего делать)
   function adjustButtonForOneOff(){
     const btn = document.querySelector('[data-cpc-btn]');
+    if (!btn) return;
     const expected = sessionStorage.getItem('cpc_last_created_pid') || '';
     const current = String(window.__cpc_current_pid || '');
-    if (!btn) return;
+    const textSpan = btn.querySelector('.form-control__button-text') || btn;
     if (expected && current === expected) {
       btn.setAttribute('data-cpc-mode','add');
-      const textSpan = btn.querySelector('.form-control__button-text') || btn;
       textSpan.textContent = 'Add to Bag';
     } else {
       btn.setAttribute('data-cpc-mode','quote');
-      const textSpan = btn.querySelector('.form-control__button-text') || btn;
       textSpan.textContent = 'Quote & Add to Bag';
     }
   }
@@ -213,9 +228,13 @@
     if (!btn) return;
     e.preventDefault();
 
-    const mode = btn.getAttribute('data-cpc-mode') || 'quote';
+    // на всякий случай: работаем только если это базовый товар
+    if (!isTargetProduct()) {
+      // на иных товарах наша кнопка не должна появляться; если появилась — пас
+      return;
+    }
 
-    // Если мы уже на созданной карточке — ведём себя как "Add to Bag"
+    const mode = btn.getAttribute('data-cpc-mode') || 'quote';
     if (mode === 'add') {
       const native = findAddToBagButton();
       if (native) {
@@ -227,8 +246,7 @@
       return;
     }
 
-    // Иначе — режим расчёта и создания one-off
-    const baseSku = getSku();
+    const baseSku = getSkuCached();
     const L = readLengthMm();   if (!L.ok) return alert(L.reason);
     const T = readThickness();  if (!T.ok) return alert(T.reason);
 
@@ -254,8 +272,7 @@
       }
 
       const pid = String(data.productId);
-      // Всегда сохраняем маркер one-off, даже при AUTO_ADD=false (нужно для режима "Add to Bag")
-      sessionStorage.setItem('cpc_last_created_pid', pid);
+      sessionStorage.setItem('cpc_last_created_pid', pid); // маркер — но на one-off мы ничего не инжектим
       openProductSafe(pid);
 
     }catch(err){
@@ -301,26 +318,12 @@
     document.body.appendChild(a); a.click(); a.remove();
   }
 
-  // === Нативная Add to Bag ===
-  //function findAddToBagButton(){
-  //  let btn = document.querySelector('.details-product-purchase__add-to-bag button.form-control__button');
-  //  if (btn) return btn;
-  //  const candidates = document.querySelectorAll('button.form-control__button');
-  //  for (const b of candidates) {
-  //    const txt = (b.textContent || '').trim();
-  //    if (/add to bag|в корзину|купить|додати в кошик|до кошика/i.test(txt)) return b;
-  //  }
-  //  btn = document.querySelector('.ecwid-btn--submit');
-  //  if (btn) return btn;
-  //  return null;
-  //}
+  // === Нативная Add to Bag (на базовом товаре она скрыта — используем по необходимости) ===
   function findAddToBagButton(){
-  return document.querySelector(
-    '.details-product-purchase__add-to-bag button.form-control__button'
-  );
-}
+    return document.querySelector('.details-product-purchase__add-to-bag button.form-control__button');
+  }
 
-  // === Автодобавление на созданном товаре (опционально) ===
+  // === Автодобавление (опционально, но всё равно не затронет one-off, т.к. там не инжектим) ===
   function clickAddToBagWithRetries(maxTries = 8, delay = 250){
     let tries = 0;
     (function tryClick(){
@@ -339,30 +342,51 @@
       if (page.type !== 'PRODUCT') return;
       const expected = sessionStorage.getItem('cpc_last_created_pid');
       if (!expected || String(page.productId) !== String(expected)) return;
-      const ourBtnWrap = document.querySelector('[data-cpc-btn]')?.closest('.form-control.form-control--button');
-      if (ourBtnWrap) ourBtnWrap.style.display = 'none';
       setTimeout(() => clickAddToBagWithRetries(), 300);
     });
   }
 
-  // === Применение для целевого товара ===
-  function applyForWidth1210(){
-    if (!isTargetProduct()) return;
-    suppressActionPanel();
-    patchLengthField();
-    injectCalcButton();
+  // === Один безопасный запуск на кадр для текущего товара ===
+  function safeScheduleApply(){
+    if (window.__cpc_scheduled) return;
+    window.__cpc_scheduled = true;
+    requestAnimationFrame(() => {
+      try {
+        if (window.__cpc_applied_pid === window.__cpc_current_pid) return;
+        suppressActionPanel();
+        patchLengthField();
+        injectCalcButton();
+        adjustButtonForOneOff(); // на базовом товаре установит «Quote & Add to Bag»
+        window.__cpc_applied_pid = window.__cpc_current_pid;
+      } finally {
+        window.__cpc_scheduled = false;
+      }
+    });
   }
 
-  // === Observer: Ecwid перерисовывает DOM ===
+  // === Observer: только в карточке нужного товара, с дебаунсом ===
   function ensureObserver(){
     if (window.__cpcMo) return;
-    const root = document.querySelector('.ec-store, .ecwid-productBrowser, body') || document.body;
+
+    const root =
+      document.querySelector('.ec-product-details, .ecwid-productBrowser-details, .product-details') ||
+      document.querySelector('.ec-store, .ecwid-productBrowser') ||
+      document.body;
+
+    let scheduled = false;
     const mo = new MutationObserver(() => {
-      applyForWidth1210();
-      adjustButtonForOneOff();
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => {
+        scheduled = false;
+        if (!isTargetProduct()) return; // на чужих товарах ничего не делаем
+        safeScheduleApply();
+      });
     });
+
     mo.observe(root, { childList:true, subtree:true });
     window.__cpcMo = mo;
   }
 
 })();
+
