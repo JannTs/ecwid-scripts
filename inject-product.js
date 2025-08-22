@@ -302,18 +302,23 @@
   }
 
   // === Нативная Add to Bag ===
+  //function findAddToBagButton(){
+  //  let btn = document.querySelector('.details-product-purchase__add-to-bag button.form-control__button');
+  //  if (btn) return btn;
+  //  const candidates = document.querySelectorAll('button.form-control__button');
+  //  for (const b of candidates) {
+  //    const txt = (b.textContent || '').trim();
+  //    if (/add to bag|в корзину|купить|додати в кошик|до кошика/i.test(txt)) return b;
+  //  }
+  //  btn = document.querySelector('.ecwid-btn--submit');
+  //  if (btn) return btn;
+  //  return null;
+  //}
   function findAddToBagButton(){
-    let btn = document.querySelector('.details-product-purchase__add-to-bag button.form-control__button');
-    if (btn) return btn;
-    const candidates = document.querySelectorAll('button.form-control__button');
-    for (const b of candidates) {
-      const txt = (b.textContent || '').trim();
-      if (/add to bag|в корзину|купить|додати в кошик|до кошика/i.test(txt)) return b;
-    }
-    btn = document.querySelector('.ecwid-btn--submit');
-    if (btn) return btn;
-    return null;
-  }
+  return document.querySelector(
+    '.details-product-purchase__add-to-bag button.form-control__button'
+  );
+}
 
   // === Автодобавление на созданном товаре (опционально) ===
   function clickAddToBagWithRetries(maxTries = 8, delay = 250){
