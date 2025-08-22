@@ -1,4 +1,4 @@
-<script>
+
 (function(){
   const API_ENDPOINT = 'https://ecwid-custom-pricing.vercel.app/api/custom-product/quote';
   const MIN = 1000, MAX = 12000;
@@ -235,6 +235,5 @@
     window.__cpcMo = mo;
   }
 })();
-</script>
 
 
