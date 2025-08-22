@@ -1,37 +1,35 @@
 
 (function(){
-  // === Настройки ===
+  // === Settings ===
   const API_ENDPOINT = 'https://ecwid-custom-pricing.vercel.app/api/custom-product/quote';
   const MIN = 1000, MAX = 12000;
   const PLACEHOLDER = `Numeric from ${MIN} to ${MAX}`;
-  const AUTO_ADD_ENABLED = false;
+  const AUTO_ADD_ENABLED = false; // авто-добавление в корзину на one-off не требуется
 
-  // === Bootstrap Ecwid ===
+  // === Ecwid boot ===
   function waitEcwid(cb){ (typeof Ecwid!=='undefined' && Ecwid.OnAPILoaded)?cb():setTimeout(()=>waitEcwid(cb),100); }
 
   waitEcwid(() => {
     Ecwid.OnAPILoaded.add(() => {
       if (!window.__cpc_wired_autoadd && AUTO_ADD_ENABLED) {
-        wireAutoAdd();
+        wireAutoAdd(); 
         window.__cpc_wired_autoadd = true;
       }
       Ecwid.OnPageLoaded.add(page => {
         if (page.type !== 'PRODUCT') return;
 
         window.__cpc_current_pid = String(page.productId || '');
-        window.__cpc_applied_pid = null; // сброс на новый товар
+        window.__cpc_applied_pid = null; // сброс при смене товара
 
-        // ВАЖНО: работаем только на SKU ровно WIDTH-1210
         if (isTargetProduct()) {
           safeScheduleApply();
-          ensureObserver(); // наблюдаем только в карточке нужного товара
+          ensureObserver(); // наблюдаем только на нужной карточке
         }
-        // на остальных товарах — ничего не делаем
       });
     });
   });
 
-  // === SKU ===
+  // === SKU (строго: ровно WIDTH-1210) ===
   function getSku(){
     const sels = [
       '[itemprop="sku"]',
@@ -53,8 +51,6 @@
     }
     return null;
   }
-
-  // кэшируем SKU на текущий productId, чтобы не гонять селекторы на каждую мутацию
   function getSkuCached(){
     const pid = String(window.__cpc_current_pid || '');
     if (!pid) return getSku();
@@ -64,13 +60,9 @@
     window.__cpc_sku_cache[pid] = sku;
     return sku;
   }
+  function isTargetProduct(){ return getSkuCached() === 'WIDTH-1210'; }
 
-  // ТОЛЬКО ровно WIDTH-1210 (без суффиксов)
-  function isTargetProduct(){
-    return getSkuCached() === 'WIDTH-1210';
-  }
-
-  // === Panel: hide qty & controls (CSS) — вызываем только на базовом товаре ===
+  // === Hide native qty & controls (только на базовом товаре) ===
   function suppressActionPanel(){
     const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
     if (!panel) return;
@@ -90,7 +82,7 @@
     }
   }
 
-  // === Length input & placeholder ===
+  // === Length input ===
   function getLengthInput(){
     let input =
       document.querySelector('input[aria-label="Length (mm)"]') ||
@@ -110,7 +102,6 @@
     }
     return input || null;
   }
-
   function patchLengthField(){
     const input = getLengthInput();
     if (!input) return;
@@ -125,6 +116,7 @@
       input.addEventListener('input', () => {
         const digits = (input.value || '').replace(/[^\d]/g,'');
         if (digits !== input.value) input.value = digits;
+        scheduleRecalcPrice();
       });
       input.addEventListener('blur', () => {
         const v = parseInt(input.value || '0', 10);
@@ -135,6 +127,7 @@
           input.classList.remove('cpc-error');
           hideTinyHint(input);
         }
+        scheduleRecalcPrice();
       });
       input.dataset.cpcSanitize = '1';
     }
@@ -152,7 +145,6 @@
     const hint = input.closest('.form-control')?.querySelector('.cpc-hint');
     if (hint) hint.remove();
   }
-
   function readLengthMm(){
     const inp = getLengthInput();
     if (!inp) return { ok:false, reason:'Length field not found' };
@@ -163,10 +155,21 @@
   }
 
   // === Thickness radio ===
-  function readThickness(){
+  function getThicknessRadios(){
     let radios = document.querySelectorAll('input[type="radio"][name="Thickness"]');
     if (!radios.length) radios = document.querySelectorAll('input[type="radio"][name*="hickness"]');
-    const list = Array.from(radios);
+    return Array.from(radios);
+  }
+  function bindThicknessChange(){
+    const radios = getThicknessRadios();
+    radios.forEach(r=>{
+      if (r.dataset.cpcBound) return;
+      r.addEventListener('change', scheduleRecalcPrice);
+      r.dataset.cpcBound = '1';
+    });
+  }
+  function readThickness(){
+    const list = getThicknessRadios();
     const checked = list.find(r => r.checked);
     const labelText = checked
       ? (document.querySelector(`label[for="${checked.id}"]`)?.textContent || checked.value || '')
@@ -176,18 +179,64 @@
     return { ok:true, value: m[0].replace(',','.') };
   }
 
-  // === Client calc (лог/UX) ===
+  // === Front calc (как на бэкенде) ===
   function calcClient(lengthMm, thickness){
     const widthM = 1.21;
     const area = +(widthM * (lengthMm/1000)).toFixed(3);
     const base = +(area * 22).toFixed(2);
-    const surchargePerSqm = thickness==='0.6'?3 : thickness==='0.7'?4 : 0;
+    const surchargePerSqm = thickness==='0.6'?3 : (thickness==='0.7'?4:0);
     const extra = +(area * surchargePerSqm).toFixed(2);
     const final = +(base + extra).toFixed(2);
     return { area, base, extra, final };
   }
 
-  // === Inject button (только на базовом товаре) ===
+  // === Update price UI ===
+  function getPriceEls(){
+    const box = document.querySelector('.product-details__product-price.ec-price-item[itemprop="price"]') ||
+                document.querySelector('.product-details__product-price.ec-price-item');
+    const span = document.querySelector('.details-product-price__value.ec-price-item');
+    return { box, span };
+  }
+  function getCurrencySymbol(){
+    const { span } = getPriceEls();
+    const txt = (span?.textContent || '').trim();
+    // ищем любой нецифровой префикс, по умолчанию €
+    const m = txt.match(/[^\d.,-]+/);
+    return m ? m[0].trim() : '€';
+  }
+  function formatPrice(v){
+    const sym = getCurrencySymbol();
+    return `${sym}${v.toFixed(2)}`;
+  }
+  function updateDisplayedPrice(){
+    const { box, span } = getPriceEls();
+    if (!span) return;
+
+    const L = readLengthMm();
+    const T = readThickness();
+
+    if (!L.ok || !T.ok) {
+      // показываем 0 если не хватает входных данных
+      span.textContent = formatPrice(0);
+      if (box) box.setAttribute('content', '0');
+      return;
+    }
+
+    const c = calcClient(L.value, T.value);
+    span.textContent = formatPrice(c.final);
+    if (box) box.setAttribute('content', String(c.final));
+    // можно логировать:
+    // console.log('[CPC] live price:', c.final, 'area:', c.area, 'base:', c.base, 'extra:', c.extra);
+  }
+  // дебаунс пересчёта от событий
+  let __cpc_priceRAF = false;
+  function scheduleRecalcPrice(){
+    if (__cpc_priceRAF) return;
+    __cpc_priceRAF = true;
+    requestAnimationFrame(()=>{ __cpc_priceRAF = false; updateDisplayedPrice(); });
+  }
+
+  // === Inject button ===
   function injectCalcButton(){
     if (document.querySelector('[data-cpc-btn]')) return;
     const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
@@ -196,66 +245,37 @@
     wrap.className = 'form-control form-control--button';
     wrap.style.marginTop = '10px';
     wrap.innerHTML = `
-      <button type="button" data-cpc-btn class="form-control__button form-control__button--icon-center" data-cpc-mode="quote">
-        <span class="form-control__button-text">Quote &amp; Add to Bag</span>
+      <button type="button" data-cpc-btn class="form-control__button form-control__button--icon-center">
+        <span class="form-control__button-text">Approve the quote</span>
       </button>
     `;
     panel.appendChild(wrap);
     if (!window.__cpc_click_bound) {
-      document.addEventListener('click', onCalcClick, true);
+      document.addEventListener('click', onApproveClick, true);
       window.__cpc_click_bound = true;
     }
   }
 
-  // (оставляем для совместимости, но на one-off мы не инжектим кнопку, так что тут обычно нечего делать)
-  function adjustButtonForOneOff(){
-    const btn = document.querySelector('[data-cpc-btn]');
-    if (!btn) return;
-    const expected = sessionStorage.getItem('cpc_last_created_pid') || '';
-    const current = String(window.__cpc_current_pid || '');
-    const textSpan = btn.querySelector('.form-control__button-text') || btn;
-    if (expected && current === expected) {
-      btn.setAttribute('data-cpc-mode','add');
-      textSpan.textContent = 'Add to Bag';
-    } else {
-      btn.setAttribute('data-cpc-mode','quote');
-      textSpan.textContent = 'Quote & Add to Bag';
-    }
-  }
-
-  async function onCalcClick(e){
+  // === Approve → create product → open its page ===
+  async function onApproveClick(e){
     const btn = e.target.closest('[data-cpc-btn]');
     if (!btn) return;
     e.preventDefault();
 
-    // на всякий случай: работаем только если это базовый товар
-    if (!isTargetProduct()) {
-      // на иных товарах наша кнопка не должна появляться; если появилась — пас
-      return;
-    }
+    // работаем только на базовом товаре
+    if (!isTargetProduct()) return;
 
-    const mode = btn.getAttribute('data-cpc-mode') || 'quote';
-    if (mode === 'add') {
-      const native = findAddToBagButton();
-      if (native) {
-        native.click();
-        setTimeout(() => (window.Ecwid && Ecwid.openPage) ? Ecwid.openPage('cart') : (location.hash='#!/cart'), 400);
-      } else {
-        alert('Add to Bag button is unavailable.');
-      }
-      return;
-    }
-
-    const baseSku = getSkuCached();
     const L = readLengthMm();   if (!L.ok) return alert(L.reason);
     const T = readThickness();  if (!T.ok) return alert(T.reason);
 
+    // локальный лог
     const c = calcClient(L.value, T.value);
-    console.log('[CPC] area:', c.area, 'base:', c.base, 'extra:', c.extra, 'final:', c.final);
+    console.log('[CPC] approve: area', c.area, 'base', c.base, 'extra', c.extra, 'final', c.final);
 
-    const payload = { lengthMm: L.value, thickness: T.value, baseSku };
+    const payload = { lengthMm: L.value, thickness: T.value, baseSku: getSkuCached() };
+
     try{
-      setBtnLoading(btn,true);
+      setBtnLoading(btn,true); // покажем "Creating…"
       const r = await fetch(API_ENDPOINT, {
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
@@ -272,7 +292,8 @@
       }
 
       const pid = String(data.productId);
-      sessionStorage.setItem('cpc_last_created_pid', pid); // маркер — но на one-off мы ничего не инжектим
+      // метка — пригодится, если когда-нибудь вернём авто-режим
+      sessionStorage.setItem('cpc_last_created_pid', pid);
       openProductSafe(pid);
 
     }catch(err){
@@ -283,14 +304,14 @@
     }
   }
 
-  // === Loading text ===
+  // === Loading state ===
   function setBtnLoading(btn, loading){
     const textSpan = btn.querySelector('.form-control__button-text') || btn;
     if (loading){
       btn.setAttribute('disabled','disabled');
       btn.style.opacity='0.7'; btn.style.cursor='wait';
       if (!textSpan.dataset._txt) textSpan.dataset._txt = textSpan.textContent || '';
-      textSpan.textContent = 'Calculating…';
+      textSpan.textContent = 'Creating…';
     } else {
       btn.removeAttribute('disabled');
       btn.style.opacity=''; btn.style.cursor='';
@@ -298,7 +319,7 @@
     }
   }
 
-  // === Safe open product ===
+  // === Open product safely ===
   function isHashRouting(){ return /#!/.test(location.href); }
   function openProductSafe(pid){
     try {
@@ -318,12 +339,10 @@
     document.body.appendChild(a); a.click(); a.remove();
   }
 
-  // === Нативная Add to Bag (на базовом товаре она скрыта — используем по необходимости) ===
+  // === (Опционально) авто-добавление на one-off — выключено флагом ===
   function findAddToBagButton(){
     return document.querySelector('.details-product-purchase__add-to-bag button.form-control__button');
   }
-
-  // === Автодобавление (опционально, но всё равно не затронет one-off, т.к. там не инжектим) ===
   function clickAddToBagWithRetries(maxTries = 8, delay = 250){
     let tries = 0;
     (function tryClick(){
@@ -346,7 +365,7 @@
     });
   }
 
-  // === Один безопасный запуск на кадр для текущего товара ===
+  // === One-shot apply on frame ===
   function safeScheduleApply(){
     if (window.__cpc_scheduled) return;
     window.__cpc_scheduled = true;
@@ -355,8 +374,9 @@
         if (window.__cpc_applied_pid === window.__cpc_current_pid) return;
         suppressActionPanel();
         patchLengthField();
+        bindThicknessChange();
         injectCalcButton();
-        adjustButtonForOneOff(); // на базовом товаре установит «Quote & Add to Bag»
+        scheduleRecalcPrice(); // сразу рассчитать и показать цену
         window.__cpc_applied_pid = window.__cpc_current_pid;
       } finally {
         window.__cpc_scheduled = false;
@@ -364,7 +384,7 @@
     });
   }
 
-  // === Observer: только в карточке нужного товара, с дебаунсом ===
+  // === MutationObserver (узкий root + RAF) ===
   function ensureObserver(){
     if (window.__cpcMo) return;
 
@@ -379,7 +399,8 @@
       scheduled = true;
       requestAnimationFrame(() => {
         scheduled = false;
-        if (!isTargetProduct()) return; // на чужих товарах ничего не делаем
+        if (!isTargetProduct()) return;
+        // узко: привязка событий/инжект кнопки/пересчёт, но не чаще одного кадра
         safeScheduleApply();
       });
     });
