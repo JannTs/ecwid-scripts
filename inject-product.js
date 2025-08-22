@@ -307,7 +307,7 @@ openProductSafe(pid);
   // === Применение для целевого товара ===
   function applyForWidth1210(){
     if (!isTargetProduct()) return;
-    suppressActionPanel();
+    //suppressActionPanel();
     patchLengthField();
     injectCalcButton();
   }
