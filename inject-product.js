@@ -12,22 +12,27 @@
   waitEcwid(() => {
     Ecwid.OnAPILoaded.add(() => {
       if (!window.__cpc_wired_autoadd && AUTO_ADD_ENABLED) {
-        wireAutoAdd(); 
+        wireAutoAdd();
         window.__cpc_wired_autoadd = true;
       }
+
       Ecwid.OnPageLoaded.add(page => {
-        if (page.type !== 'PRODUCT') return;
+        if (page.type !== 'PRODUCT') { teardownNonTarget(); return; }
+
         window.__cpc_current_pid = String(page.productId || '');
-        window.__cpc_applied_pid = null;
+        window.__cpc_applied_pid = null; // reset for new product page
+
         if (isTargetProduct()) {
           safeScheduleApply();
-          ensureObserver();
+          ensureObserver();   // наблюдаем только на нужной карточке
+        } else {
+          teardownNonTarget(); // убрать наши элементы, вернуть панель
         }
       });
     });
   });
 
-  // === SKU helpers (strict WIDTH-1210) ===
+  // === SKU (strict WIDTH-1210) ===
   function getSku(){
     const sels = [
       '[itemprop="sku"]','.product-details__product-sku','[data-product-sku]',
@@ -55,7 +60,7 @@
   }
   function isTargetProduct(){ return getSkuCached() === 'WIDTH-1210'; }
 
-  // === Hide native qty & controls (only base product) ===
+  // === Panel: hide qty & controls (only on base product) ===
   function suppressActionPanel(){
     const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
     if (!panel) return;
@@ -73,6 +78,21 @@
       `;
       document.head.appendChild(st);
     }
+  }
+
+  // === Teardown for non-target product pages ===
+  function teardownNonTarget(){
+    // вернуть панель в нормальный вид (снять метку)
+    document.querySelectorAll('.product-details__action-panel.details-product-purchase[data-cpc-scope="1"]').forEach(p=>{
+      p.removeAttribute('data-cpc-scope');
+    });
+    // убрать нашу кнопку
+    document.querySelectorAll('[data-cpc-btn]').forEach(b=>{
+      const wrap = b.closest('.form-control.form-control--button'); if (wrap) wrap.remove();
+      b.remove();
+    });
+    // убрать инфоблок
+    const info = document.getElementById('cpc-quote-box'); if (info) info.remove();
   }
 
   // === Length input ===
@@ -201,7 +221,7 @@
     return `${sym}${v.toFixed(2)}`;
   }
   function trimZeros(n){
-    return (+n).toFixed(3).replace(/\.?0+$/,''); // 1.210 -> 1.21; 1.000 -> 1
+    return (+n).toFixed(3).replace(/\.?0+$/,'');
   }
   function ensureQuoteStyles(){
     if (document.getElementById('cpc-quote-style')) return;
@@ -242,28 +262,22 @@
     const el = ensureInfoBlock(); if (!el) return;
     el.innerHTML = `<div class="cpc-row cpc-muted">Set length and thickness to see quote</div>`;
   }
-
   function updateDisplayedPrice(){
     const { box, span } = getPriceEls();
     if (!span) return;
-
     const L = readLengthMm();
     const T = readThickness();
-
     if (!L.ok || !T.ok) {
       span.textContent = formatPrice(0);
       if (box) box.setAttribute('content', '0');
       clearInfoBlock();
       return;
     }
-
     const c = calcClient(L.value, T.value);
     span.textContent = formatPrice(c.final);
     if (box) box.setAttribute('content', String(c.final));
     renderInfoBlock(c);
   }
-
-  // дебаунс пересчёта
   let __cpc_priceRAF = false;
   function scheduleRecalcPrice(){
     if (__cpc_priceRAF) return;
@@ -291,23 +305,49 @@
     }
   }
 
-  // === Approve → create product → open its page ===
+  // === Anti-duplication cache (same params -> reuse product) ===
+  function makeKey(lengthMm, thickness){
+    // SKU строго WIDTH-1210, можно включить и его для надёжности
+    return `WIDTH-1210|${lengthMm}|${thickness}`;
+  }
+  function getPidFromCache(lengthMm, thickness){
+    try {
+      const map = JSON.parse(sessionStorage.getItem('cpc_pid_map') || '{}');
+      return map[makeKey(lengthMm, thickness)] || null;
+    } catch { return null; }
+  }
+  function putPidToCache(lengthMm, thickness, pid){
+    try {
+      const map = JSON.parse(sessionStorage.getItem('cpc_pid_map') || '{}');
+      map[makeKey(lengthMm, thickness)] = String(pid);
+      sessionStorage.setItem('cpc_pid_map', JSON.stringify(map));
+    } catch {}
+  }
+
+  // === Approve → create/open product ===
+  let __cpc_pending = false;
   async function onApproveClick(e){
     const btn = e.target.closest('[data-cpc-btn]');
     if (!btn) return;
     e.preventDefault();
+
+    // работаем только на базовом товаре
     if (!isTargetProduct()) return;
 
     const L = readLengthMm();   if (!L.ok) return alert(L.reason);
     const T = readThickness();  if (!T.ok) return alert(T.reason);
 
-    const c = calcClient(L.value, T.value);
-    console.log('[CPC] approve:', c);
+    // если уже создавали для этих параметров — просто откроем
+    const cached = getPidFromCache(L.value, T.value);
+    if (cached) return openProductSafe(String(cached));
 
-    const payload = { lengthMm: L.value, thickness: T.value, baseSku: getSkuCached() };
+    if (__cpc_pending) return; // защита от дабл-клика в процессе
+    __cpc_pending = true;
 
     try{
       setBtnLoading(btn,true); // "Creating…"
+
+      const payload = { lengthMm: L.value, thickness: T.value, baseSku: getSkuCached() };
       const r = await fetch(API_ENDPOINT, {
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
@@ -319,14 +359,18 @@
         alert(`Ошибка сервера:\n${cause}`);
         return;
       }
+
       const pid = String(data.productId);
-      sessionStorage.setItem('cpc_last_created_pid', pid);
+      putPidToCache(L.value, T.value, pid);           // кэшируем, чтобы не плодить дубликаты
+      sessionStorage.setItem('cpc_last_created_pid', pid); // метка (не критично)
       openProductSafe(pid);
+
     }catch(err){
       console.error(err);
       alert(`Сеть/браузер: ${err?.message || err}`);
     }finally{
       setBtnLoading(btn,false);
+      __cpc_pending = false;
     }
   }
 
@@ -345,22 +389,30 @@
     }
   }
 
-  // === Open product safely ===
+  // === Open product safely (several strategies) ===
   function isHashRouting(){ return /#!/.test(location.href); }
   function openProductSafe(pid){
     try { if (window.Ecwid && typeof Ecwid.openProduct === 'function') { Ecwid.openProduct('p' + pid); return; } } catch(_){}
-    if (isHashRouting()) {
-      const base = location.origin + location.pathname;
-      location.href = `${base}#!/p/${pid}`;
+    try { if (window.Ecwid && typeof Ecwid.openPage === 'function') { Ecwid.openPage('product', pid); return; } } catch(_){}
+    // Instant Site SEO URL
+    if (/\/products(\/|$)/.test(location.pathname)) {
+      location.assign(`${location.origin}/products/-p${pid}`);
       return;
     }
+    // hash-store fallback
+    if (isHashRouting()) {
+      const base = location.origin + location.pathname;
+      location.assign(`${base}#!/p/${pid}`);
+      return;
+    }
+    // ultimate fallback: hidden link
     const a = document.createElement('a');
     a.href = `#!/p/${pid}`;
     a.style.display = 'none';
     document.body.appendChild(a); a.click(); a.remove();
   }
 
-  // === (Optional) auto-add (kept off) ===
+  // === (Optional) auto-add (still off) ===
   function findAddToBagButton(){
     return document.querySelector('.details-product-purchase__add-to-bag button.form-control__button');
   }
@@ -405,14 +457,13 @@
     });
   }
 
-  // === Observer (narrow root + RAF) ===
+  // === Observer (narrow root + RAF; runs only on target product) ===
   function ensureObserver(){
     if (window.__cpcMo) return;
     const root =
       document.querySelector('.ec-product-details, .ecwid-productBrowser-details, .product-details') ||
       document.querySelector('.ec-store, .ecwid-productBrowser') ||
       document.body;
-
     let scheduled = false;
     const mo = new MutationObserver(() => {
       if (scheduled) return;
@@ -423,7 +474,6 @@
         safeScheduleApply();
       });
     });
-
     mo.observe(root, { childList:true, subtree:true });
     window.__cpcMo = mo;
   }
