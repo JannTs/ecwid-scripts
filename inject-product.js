@@ -32,7 +32,7 @@
     });
   });
 
-  // === SKU (strict WIDTH-1210) ===
+  // === SKU (strict WIDTH-1210; исключаем one-off SEO URL) ===
   function getSku(){
     const sels = [
       '[itemprop="sku"]','.product-details__product-sku','[data-product-sku]',
@@ -58,7 +58,11 @@
     window.__cpc_sku_cache[pid] = sku;
     return sku;
   }
-  function isTargetProduct(){ return getSkuCached() === 'WIDTH-1210'; }
+  function isTargetProduct(){
+    // не инжектимся на SEO-страницах созданных товаров
+    if (/\/products\/-p\d+/.test(location.pathname)) return false;
+    return getSkuCached() === 'WIDTH-1210';
+  }
 
   // === Panel: hide qty & controls (only on base product) ===
   function suppressActionPanel(){
@@ -307,7 +311,6 @@
 
   // === Anti-duplication cache (same params -> reuse product) ===
   function makeKey(lengthMm, thickness){
-    // SKU строго WIDTH-1210, можно включить и его для надёжности
     return `WIDTH-1210|${lengthMm}|${thickness}`;
   }
   function getPidFromCache(lengthMm, thickness){
@@ -324,22 +327,24 @@
     } catch {}
   }
 
-  // === Approve → create/open product ===
+  // === Approve → create/open product (with cache) ===
   let __cpc_pending = false;
   async function onApproveClick(e){
     const btn = e.target.closest('[data-cpc-btn]');
     if (!btn) return;
     e.preventDefault();
 
-    // работаем только на базовом товаре
     if (!isTargetProduct()) return;
 
     const L = readLengthMm();   if (!L.ok) return alert(L.reason);
     const T = readThickness();  if (!T.ok) return alert(T.reason);
 
-    // если уже создавали для этих параметров — просто откроем
+    // уже создавали такой набор параметров? → сразу открываем (без нового POST)
     const cached = getPidFromCache(L.value, T.value);
-    if (cached) return openProductSafe(String(cached));
+    if (cached) {
+      openProductRobust(String(cached));
+      return;
+    }
 
     if (__cpc_pending) return; // защита от дабл-клика в процессе
     __cpc_pending = true;
@@ -361,9 +366,9 @@
       }
 
       const pid = String(data.productId);
-      putPidToCache(L.value, T.value, pid);           // кэшируем, чтобы не плодить дубликаты
-      sessionStorage.setItem('cpc_last_created_pid', pid); // метка (не критично)
-      openProductSafe(pid);
+      putPidToCache(L.value, T.value, pid);                 // кэшируем → не дублировать
+      sessionStorage.setItem('cpc_last_created_pid', pid);  // метка для авто-режима (если включите)
+      openProductRobust(pid);
 
     }catch(err){
       console.error(err);
@@ -389,30 +394,46 @@
     }
   }
 
-  // === Open product safely (several strategies) ===
-  function isHashRouting(){ return /#!/.test(location.href); }
-  function openProductSafe(pid){
-    try { if (window.Ecwid && typeof Ecwid.openProduct === 'function') { Ecwid.openProduct('p' + pid); return; } } catch(_){}
-    try { if (window.Ecwid && typeof Ecwid.openPage === 'function') { Ecwid.openPage('product', pid); return; } } catch(_){}
-    // Instant Site SEO URL
-    if (/\/products(\/|$)/.test(location.pathname)) {
-      location.assign(`${location.origin}/products/-p${pid}`);
-      return;
+  // === Robust navigation (guaranteed redirect) ===
+  function getSeoProductUrl(pid){
+    const base = location.origin;
+    const path = location.pathname || '/';
+    if (/\/products(\/|$)/.test(path) || /\.company\.site$/i.test(location.hostname)) {
+      return `${base}/products/-p${pid}`;
     }
-    // hash-store fallback
-    if (isHashRouting()) {
-      const base = location.origin + location.pathname;
-      location.assign(`${base}#!/p/${pid}`);
-      return;
-    }
-    // ultimate fallback: hidden link
-    const a = document.createElement('a');
-    a.href = `#!/p/${pid}`;
-    a.style.display = 'none';
-    document.body.appendChild(a); a.click(); a.remove();
+    const root = base + path.replace(/\?.*$/, '');
+    return `${root}#!/p/${pid}`;
+  }
+  function openProductRobust(pid){
+    const startHref = location.href;
+    const startPid  = String(window.__cpc_current_pid || '');
+    const navigated = () => {
+      return String(window.__cpc_current_pid || '') !== startPid || location.href !== startHref;
+    };
+
+    // 1) Ecwid API: openProduct
+    try { if (window.Ecwid && typeof Ecwid.openProduct === 'function') Ecwid.openProduct('p' + pid); } catch(_){}
+
+    // 2) openPage fallback
+    setTimeout(() => {
+      if (navigated()) return;
+      try { if (window.Ecwid && typeof Ecwid.openPage === 'function') Ecwid.openPage('product', pid); } catch(_){}
+    }, 250);
+
+    // 3) SEO URL
+    setTimeout(() => {
+      if (navigated()) return;
+      location.assign(getSeoProductUrl(pid));
+    }, 500);
+
+    // 4) final hard redirect
+    setTimeout(() => {
+      if (navigated()) return;
+      location.href = getSeoProductUrl(pid);
+    }, 1200);
   }
 
-  // === (Optional) auto-add (still off) ===
+  // === (Optional) auto-add (off). One-time cleanup of marker after click ===
   function findAddToBagButton(){
     return document.querySelector('.details-product-purchase__add-to-bag button.form-control__button');
   }
@@ -422,6 +443,8 @@
       const btn = findAddToBagButton();
       if (btn) {
         btn.click();
+        // одноразовая очистка маркера → чтобы не автокликало в будущем снова
+        try { sessionStorage.removeItem('cpc_last_created_pid'); } catch(_){}
         setTimeout(() => (window.Ecwid && Ecwid.openPage) ? Ecwid.openPage('cart') : (location.hash='#!/cart'), 400);
       } else if (tries++ < maxTries) {
         setTimeout(tryClick, delay);
