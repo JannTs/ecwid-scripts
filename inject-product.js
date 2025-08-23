@@ -19,20 +19,21 @@
       Ecwid.OnPageLoaded.add(page => {
         if (page.type !== 'PRODUCT') { teardownNonTarget(); return; }
 
+        // remember current productId for navigation checks
         window.__cpc_current_pid = String(page.productId || '');
-        window.__cpc_applied_pid = null; // reset for new product page
+        window.__cpc_applied_pid = null; // reset per product page
 
         if (isTargetProduct()) {
-          safeScheduleApply();
-          ensureObserver();   // наблюдаем только на нужной карточке
+          safeScheduleApply(); // one-shot apply per frame
+          ensureObserver();    // observe only on this product page
         } else {
-          teardownNonTarget(); // убрать наши элементы, вернуть панель
+          teardownNonTarget(); // remove our UI and restore native panel
         }
       });
     });
   });
 
-  // === SKU (strict WIDTH-1210; исключаем one-off SEO URL) ===
+  // === SKU helpers (strictly WIDTH-1210; exclude one-off SEO URLs) ===
   function getSku(){
     const sels = [
       '[itemprop="sku"]','.product-details__product-sku','[data-product-sku]',
@@ -59,12 +60,12 @@
     return sku;
   }
   function isTargetProduct(){
-    // не инжектимся на SEO-страницах созданных товаров
+    // do not inject on one-off product SEO pages like /products/-p<ID>
     if (/\/products\/-p\d+/.test(location.pathname)) return false;
     return getSkuCached() === 'WIDTH-1210';
   }
 
-  // === Panel: hide qty & controls (only on base product) ===
+  // === Hide native qty & controls (only on base product) ===
   function suppressActionPanel(){
     const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
     if (!panel) return;
@@ -86,38 +87,22 @@
 
   // === Teardown for non-target product pages ===
   function teardownNonTarget(){
-    // вернуть панель в нормальный вид (снять метку)
+    // remove scope attr to restore native UI
     document.querySelectorAll('.product-details__action-panel.details-product-purchase[data-cpc-scope="1"]').forEach(p=>{
       p.removeAttribute('data-cpc-scope');
     });
-    // убрать нашу кнопку
+    // remove our button
     document.querySelectorAll('[data-cpc-btn]').forEach(b=>{
       const wrap = b.closest('.form-control.form-control--button'); if (wrap) wrap.remove();
       b.remove();
     });
-    // убрать инфоблок
+    // remove info block
     const info = document.getElementById('cpc-quote-box'); if (info) info.remove();
   }
 
-  // === Length input ===
+  // === Length input (strict selector only) ===
   function getLengthInput(){
-    let input =
-      document.querySelector('input[aria-label="Length (mm)"]') ||
-      document.querySelector('input[aria-label*="Length"]') ||
-      document.querySelector('input[aria-label*="Длина"]') ||
-      document.querySelector('input[aria-label*="Довжина"]');
-    if (!input) {
-      const title = Array.from(document.querySelectorAll('.product-details-module__title,.details-product-option__title'))
-        .find(el => /length\s*\(mm\)|\blength\b/i.test(el.textContent || ''));
-      const mod = title?.closest('.product-details-module') || title?.closest('.details-product-option');
-      input = mod?.querySelector('input.form-control__text') || mod?.querySelector('input') || null;
-    }
-    if (!input) {
-      const ph = Array.from(document.querySelectorAll('.form-control__placeholder-inner'))
-        .find(el => /enter your text|numeric from/i.test(el.textContent || ''));
-      input = ph?.closest('.form-control')?.querySelector('input') || null;
-    }
-    return input || null;
+    return document.querySelector('input[aria-label="Length (mm)"]');
   }
   function patchLengthField(){
     const input = getLengthInput();
@@ -133,7 +118,7 @@
       input.addEventListener('input', () => {
         const digits = (input.value || '').replace(/[^\d]/g,'');
         if (digits !== input.value) input.value = digits;
-        scheduleRecalcPrice();
+        scheduleRecalcPrice(); // live price update
       });
       input.addEventListener('blur', () => {
         const v = parseInt(input.value || '0', 10);
@@ -144,7 +129,7 @@
           input.classList.remove('cpc-error');
           hideTinyHint(input);
         }
-        scheduleRecalcPrice();
+        scheduleRecalcPrice(); // update after validation
       });
       input.dataset.cpcSanitize = '1';
     }
@@ -171,7 +156,7 @@
     return { ok:true, value:num };
   }
 
-  // === Thickness ===
+  // === Thickness (radio) wiring ===
   function getThicknessRadios(){
     let radios = document.querySelectorAll('input[type="radio"][name="Thickness"]');
     if (!radios.length) radios = document.querySelectorAll('input[type="radio"][name*="hickness"]');
@@ -181,7 +166,7 @@
     const radios = getThicknessRadios();
     radios.forEach(r=>{
       if (r.dataset.cpcBound) return;
-      r.addEventListener('change', scheduleRecalcPrice);
+      r.addEventListener('change', scheduleRecalcPrice); // live price update
       r.dataset.cpcBound = '1';
     });
   }
@@ -196,7 +181,7 @@
     return { ok:true, value: m[0].replace(',','.') };
   }
 
-  // === Front calc (same as backend) ===
+  // === Frontend calc (same as backend) ===
   function calcClient(lengthMm, thickness){
     const widthM = 1.21;
     const area = +(widthM * (lengthMm/1000)).toFixed(3);
@@ -207,7 +192,7 @@
     return { area, base, extra, final };
   }
 
-  // === Price UI + Info block ===
+  // === Price UI + info block (Area/Base/Surcharge/Final) ===
   function getPriceEls(){
     const box = document.querySelector('.product-details__product-price.ec-price-item[itemprop="price"]') ||
                 document.querySelector('.product-details__product-price.ec-price-item');
@@ -289,7 +274,7 @@
     requestAnimationFrame(()=>{ __cpc_priceRAF = false; updateDisplayedPrice(); });
   }
 
-  // === Inject button (Approve the quote) ===
+  // === Inject CTA button (Approve the quote) ===
   function injectCalcButton(){
     if (document.querySelector('[data-cpc-btn]')) return;
     const panel = document.querySelector('.product-details-module.product-details__action-panel.details-product-purchase');
@@ -309,7 +294,7 @@
     }
   }
 
-  // === Anti-duplication cache (same params -> reuse product) ===
+  // === Anti-duplication cache (same params => reuse existing product) ===
   function makeKey(lengthMm, thickness){
     return `WIDTH-1210|${lengthMm}|${thickness}`;
   }
@@ -327,7 +312,7 @@
     } catch {}
   }
 
-  // === Approve → create/open product (with cache) ===
+  // === Approve → create/open product (with cache and robust navigation) ===
   let __cpc_pending = false;
   async function onApproveClick(e){
     const btn = e.target.closest('[data-cpc-btn]');
@@ -339,18 +324,18 @@
     const L = readLengthMm();   if (!L.ok) return alert(L.reason);
     const T = readThickness();  if (!T.ok) return alert(T.reason);
 
-    // уже создавали такой набор параметров? → сразу открываем (без нового POST)
+    // if already created for the same params — open cached one (no duplicate POST)
     const cached = getPidFromCache(L.value, T.value);
     if (cached) {
       openProductRobust(String(cached));
       return;
     }
 
-    if (__cpc_pending) return; // защита от дабл-клика в процессе
+    if (__cpc_pending) return; // prevent double click while pending
     __cpc_pending = true;
 
     try{
-      setBtnLoading(btn,true); // "Creating…"
+      setBtnLoading(btn,true); // show "Creating…"
 
       const payload = { lengthMm: L.value, thickness: T.value, baseSku: getSkuCached() };
       const r = await fetch(API_ENDPOINT, {
@@ -361,25 +346,25 @@
       const text = await r.text(); let data = {}; try { data = JSON.parse(text); } catch(_){}
       if (!r.ok || !data.ok) {
         const cause = (data && data.error) ? data.error : (text || `${r.status} ${r.statusText}`) || 'Unknown error';
-        alert(`Ошибка сервера:\n${cause}`);
+        alert(`Server error:\n${cause}`);
         return;
       }
 
       const pid = String(data.productId);
-      putPidToCache(L.value, T.value, pid);                 // кэшируем → не дублировать
-      sessionStorage.setItem('cpc_last_created_pid', pid);  // метка для авто-режима (если включите)
-      openProductRobust(pid);
+      putPidToCache(L.value, T.value, pid);                 // cache to prevent duplicates
+      sessionStorage.setItem('cpc_last_created_pid', pid);  // marker for optional auto-add
+      openProductRobust(pid);                                // guaranteed navigation
 
     }catch(err){
       console.error(err);
-      alert(`Сеть/браузер: ${err?.message || err}`);
+      alert(`Network/Browser error: ${err?.message || err}`);
     }finally{
       setBtnLoading(btn,false);
       __cpc_pending = false;
     }
   }
 
-  // === Loading state ===
+  // === Loading state for CTA ===
   function setBtnLoading(btn, loading){
     const textSpan = btn.querySelector('.form-control__button-text') || btn;
     if (loading){
@@ -394,13 +379,15 @@
     }
   }
 
-  // === Robust navigation (guaranteed redirect) ===
+  // === Robust navigation (attempt multiple strategies until URL/product changes) ===
   function getSeoProductUrl(pid){
     const base = location.origin;
     const path = location.pathname || '/';
+    // prefer SEO URL on Instant Site or when already under /products
     if (/\/products(\/|$)/.test(path) || /\.company\.site$/i.test(location.hostname)) {
       return `${base}/products/-p${pid}`;
     }
+    // fallback to Ecwid hash routing
     const root = base + path.replace(/\?.*$/, '');
     return `${root}#!/p/${pid}`;
   }
@@ -408,32 +395,33 @@
     const startHref = location.href;
     const startPid  = String(window.__cpc_current_pid || '');
     const navigated = () => {
+      // consider navigated when URL changes or productId changes (via OnPageLoaded)
       return String(window.__cpc_current_pid || '') !== startPid || location.href !== startHref;
     };
 
     // 1) Ecwid API: openProduct
     try { if (window.Ecwid && typeof Ecwid.openProduct === 'function') Ecwid.openProduct('p' + pid); } catch(_){}
 
-    // 2) openPage fallback
+    // 2) Fallback: openPage
     setTimeout(() => {
       if (navigated()) return;
       try { if (window.Ecwid && typeof Ecwid.openPage === 'function') Ecwid.openPage('product', pid); } catch(_){}
     }, 250);
 
-    // 3) SEO URL
+    // 3) SEO URL redirect
     setTimeout(() => {
       if (navigated()) return;
       location.assign(getSeoProductUrl(pid));
     }, 500);
 
-    // 4) final hard redirect
+    // 4) Final hard redirect
     setTimeout(() => {
       if (navigated()) return;
       location.href = getSeoProductUrl(pid);
     }, 1200);
   }
 
-  // === (Optional) auto-add (off). One-time cleanup of marker after click ===
+  // === (Optional) auto-add flow (disabled). One-time marker cleanup after click ===
   function findAddToBagButton(){
     return document.querySelector('.details-product-purchase__add-to-bag button.form-control__button');
   }
@@ -443,7 +431,7 @@
       const btn = findAddToBagButton();
       if (btn) {
         btn.click();
-        // одноразовая очистка маркера → чтобы не автокликало в будущем снова
+        // cleanup marker so it doesn't auto-add again on future visits
         try { sessionStorage.removeItem('cpc_last_created_pid'); } catch(_){}
         setTimeout(() => (window.Ecwid && Ecwid.openPage) ? Ecwid.openPage('cart') : (location.hash='#!/cart'), 400);
       } else if (tries++ < maxTries) {
@@ -461,7 +449,7 @@
     });
   }
 
-  // === One-shot apply on frame ===
+  // === One-shot apply per animation frame ===
   function safeScheduleApply(){
     if (window.__cpc_scheduled) return;
     window.__cpc_scheduled = true;
@@ -480,7 +468,7 @@
     });
   }
 
-  // === Observer (narrow root + RAF; runs only on target product) ===
+  // === MutationObserver (narrow root + RAF; active only on target product) ===
   function ensureObserver(){
     if (window.__cpcMo) return;
     const root =
