@@ -1,7 +1,7 @@
 
 (function(){
   // === Settings ===
-  const API_ENDPOINT = 'https://ecwid-custom-pricing.vercel.app/api/custom-product/quote';
+  const API_ENDPOINT = 'https://ecwid-cust-cost-poli.vercel.app/api/custom-product/quote';//'https://ecwid-custom-pricing.vercel.app/api/custom-product/quote';
   const MIN = 1000, MAX = 12000;
   const PLACEHOLDER = `Numeric from ${MIN} to ${MAX}`;
   const AUTO_ADD_ENABLED = false;
